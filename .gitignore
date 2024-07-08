@@ -1,0 +1,3 @@
+__pycache__/
+data/ # Contains sensitive data
+config.yaml # Contains authentication secrets

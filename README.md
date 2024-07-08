@@ -18,4 +18,9 @@ along with this program.  If you have not received this, see <http://www.gnu.org
 For a (non-legally binding) summary of the license see https://tldrlegal.com/license/gnu-general-public-license-v3-(gpl-3)
 
 ## Installation
-TO DO
+1. Install dependencies (TO DO: Details)
+2. `cp example_config.yaml config.yaml`
+
+## Usage
+* To load your data from Tabula: Log-in in your browser and copy your cookie into config.yaml, then run `python3 fetch_data.py`
+* To delete your local copy of your data (after all it may well contain information you deem sensitive): `bash purge_data.sh`

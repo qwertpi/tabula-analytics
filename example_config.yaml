@@ -1,0 +1,3 @@
+auth:
+  # Copy in the value of the __Host-SSO-Tabula-SSC cookie from your web browser
+  session_cookie: "FILL_ME_IN"
