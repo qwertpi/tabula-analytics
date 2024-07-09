@@ -1,8 +1,7 @@
-import json
 from datetime import datetime
-from operator import pos
+import json
 
-from bottle import default_app, route, redirect
+from bottle import default_app, route, redirect # type: ignore
 import matplotlib.pyplot as plt # type: ignore
 import mpld3 # type: ignore
 
@@ -19,7 +18,8 @@ BUTTON_STYLE = '''.button {
     margin: inherit}'''
 
 def generate_button(links_to: str, message:str, position: str):
-    return f"<a href='{links_to}' class='button' style='float: {position};'>{message}</a><style>{BUTTON_STYLE}</style>"
+    return (f"<a href='{links_to}' class='button' style='float: {position};'>"+
+        f"{message}</a><style>{BUTTON_STYLE}</style>")
 
 def generate_prev_next_buttons(i: int):
     def generate_prev_button(i: int):
@@ -80,7 +80,7 @@ def p2():
     return "TO DO" + generate_prev_next_buttons(2)
 
 @route('/p3')
-def p2():
+def p3():
     return "TO DO" + generate_prev_next_buttons(3)
 
 app = default_app()

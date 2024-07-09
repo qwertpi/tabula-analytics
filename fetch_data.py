@@ -1,7 +1,8 @@
 import json
-import yaml
+
 from requests import Response, get
 from tqdm import tqdm
+import yaml
 
 URLS = ["https://tabula.warwick.ac.uk/api/v1/member/me",
     "https://tabula.warwick.ac.uk/api/v1/member/me/assignments",
