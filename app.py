@@ -5,8 +5,6 @@ from bottle import default_app, route, redirect # type: ignore
 import matplotlib.pyplot as plt # type: ignore
 import mpld3 # type: ignore
 
-NUM_PAGES = 3
-
 BUTTON_STYLE = '''.button {
     display: inline-block;
     background-color: #3C1053;
@@ -25,12 +23,12 @@ def generate_prev_next_buttons(i: int):
     def generate_prev_button(i: int):
         if i == 1:
             return ""
-        return generate_button(f"p{i-1}", "Back", "left")
+        return generate_button(f"p{i-1}", "‹ Back", "left")
 
     def generate_next_button(i: int):
-        if i == NUM_PAGES:
+        if i == len(PAGES):
             return ""
-        return generate_button(f"p{i+1}", "Next", "right")
+        return generate_button(f"p{i+1}", "Next ›", "right")
 
     return generate_prev_button(i) + generate_next_button(i)
 
@@ -42,8 +40,7 @@ def landing():
         ass_data = json.load(f)
     redirect("/p1", 303)
 
-@route('/p1')
-def assignment_marks():
+def assignment_marks() -> str:
     plot_data: list[tuple[str, str, datetime, int]] = []
     if not ass_data:
         redirect("/", 303)
@@ -73,14 +70,13 @@ def assignment_marks():
         mpld3.plugins.Zoom(button=True, enabled=True)]
     for plugin in plugins:
         mpld3.plugins.connect(fig, plugin)
-    return mpld3.fig_to_html(fig) + generate_prev_next_buttons(1)
+    return mpld3.fig_to_html(fig)
 
-@route('/p2')
-def p2():
-    return "TO DO" + generate_prev_next_buttons(2)
+def empty_test_page():
+    return "TO DO"
 
-@route('/p3')
-def p3():
-    return "TO DO" + generate_prev_next_buttons(3)
-
+PAGES = [assignment_marks, empty_test_page, empty_test_page, empty_test_page]
+@route('/p<page_number:int>')
+def general_page(page_number: int) -> str:
+    return PAGES[page_number - 1]() + generate_prev_next_buttons(page_number)
 app = default_app()
