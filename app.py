@@ -34,6 +34,7 @@ def generate_prev_next_buttons(i: int):
 
     return generate_prev_button(i) + generate_next_button(i)
 
+ass_data = {}
 @route('/')
 def landing():
     with open('data/assignments.json', encoding="utf8") as f:
@@ -44,6 +45,8 @@ def landing():
 @route('/p1')
 def assignment_marks():
     plot_data: list[tuple[str, str, datetime, int]] = []
+    if not ass_data:
+        redirect("/", 303)
     for ass in ass_data["historicAssignments"]:
         if "AEP submissions" in ass['name'] or not ass['hasFeedback']:
             continue
