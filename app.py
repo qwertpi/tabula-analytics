@@ -1,9 +1,15 @@
-from datetime import datetime
+from collections import Counter
+from datetime import date, datetime, timedelta
 import json
 
 from bottle import default_app, route, redirect # type: ignore
 import matplotlib.pyplot as plt # type: ignore
 import mpld3 # type: ignore
+import numpy as np
+import pandas as pd
+
+SCALE = 0.8
+FIG_SIZE = (16*SCALE, 9*SCALE)
 
 BUTTON_STYLE = '''.button {
     display: inline-block;
@@ -33,17 +39,24 @@ def generate_prev_next_buttons(i: int):
     return generate_prev_button(i) + generate_next_button(i)
 
 ass_data = {}
+gen_data = {}
 @route('/')
 def landing():
     with open('data/assignments.json', encoding="utf8") as f:
         global ass_data
         ass_data = json.load(f)
+
+    with open('data/me.json', encoding="utf8") as f:
+        global gen_data
+        gen_data = json.load(f)['member']
+
     redirect("/p1", 303)
 
-def assignment_marks() -> str:
-    plot_data: list[tuple[str, str, datetime, int]] = []
+def assignment_marks_scatter() -> str:
     if not ass_data:
         redirect("/", 303)
+
+    plot_data: list[tuple[str, str, datetime, int]] = []
     for ass in ass_data["historicAssignments"]:
         if "AEP submissions" in ass['name'] or not ass['hasFeedback']:
             continue
@@ -60,7 +73,7 @@ def assignment_marks() -> str:
         (t[2], t[3], f"<div class='label'>{t[0]}: {t[1]}</div>")
         for t in plot_data]))
 
-    fig, ax = plt.subplots()
+    fig, ax = plt.subplots(figsize=FIG_SIZE)
     l1 = ax.plot(x, y, marker='.', linestyle="None")[0]
     plt.xlabel("Deadline")
     plt.ylabel("Mark")
@@ -72,10 +85,56 @@ def assignment_marks() -> str:
         mpld3.plugins.connect(fig, plugin)
     return mpld3.fig_to_html(fig)
 
-def empty_test_page():
-    return "TO DO"
+def assignment_marks_bar() -> str:
+    if not (ass_data and gen_data):
+        redirect("/", 303)
 
-PAGES = [assignment_marks, empty_test_page, empty_test_page, empty_test_page]
+    course_start_date = datetime.strptime(
+        gen_data['studentCourseDetails'][0]['beginDate'], "%Y-%m-%d").date()
+    course_length = gen_data['studentCourseDetails'][-1]['courseYearLength']
+
+    # This is imprecise but it's ok as no marks fall near the boundaries
+    breakpoints = [course_start_date + timedelta(days=i*365)
+        for i in range(0, course_length+1)]
+    counts: list[Counter[str]] = []
+    for i in range(1, len(breakpoints)):
+        in_year_marks = []
+        for ass in ass_data["historicAssignments"]:
+            if "AEP submissions" in ass['name'] or not ass['hasFeedback']:
+                continue
+
+            ass_date = datetime.fromisoformat(ass['studentDeadline']).date()
+            if breakpoints[i-1] < ass_date < breakpoints[i]:
+                in_year_marks.append(ass['feedback']['mark'])
+        if in_year_marks:
+            counts.append(Counter(in_year_marks))
+
+    marks = range(0, 101)
+    df = pd.DataFrame(data=None, columns=[f"Y{i}" for i in range(1, len(counts)+1)], index=marks, dtype=np.int8)
+    for year_sub_1, counter in enumerate(counts):
+        df[f"Y{year_sub_1 + 1}"] = pd.Series(counter)
+    colapsed = df.dropna(how="all")
+    min_mark = colapsed.index.min()
+    max_mark = colapsed.index.max()
+    df = df.fillna(0)
+
+    # Go horizontal then vertical
+    # Only tested for up to 4 years
+    layout = (max(1, len(counts)//2), min(2, len(counts)))
+    fig, ax = plt.subplots(figsize=FIG_SIZE)
+    subs = df.plot.bar(ax=ax, xlabel="Mark", ylabel="Frequency",
+        subplots=True, sharey=True, layout=layout)
+    for sub in subs:
+        for sub_ax in sub:
+            sub_ax.set_xbound(min_mark-1, max_mark+1)
+    plugins = [mpld3.plugins.Zoom(button=True, enabled=True)]
+    for plugin in plugins:
+        mpld3.plugins.connect(fig, plugin)
+    # Padding is required for the bottom to not get cut off
+    fig.tight_layout(pad=2)
+    return mpld3.fig_to_html(fig)
+
+PAGES = [assignment_marks_scatter, assignment_marks_bar]
 @route('/p<page_number:int>')
 def general_page(page_number: int) -> str:
     return PAGES[page_number - 1]() + generate_prev_next_buttons(page_number)
