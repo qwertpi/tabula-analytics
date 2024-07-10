@@ -141,7 +141,48 @@ def assignment_marks_bar():
     fig.tight_layout(pad=2)
     return fig, [mpld3.plugins.Zoom(button=True, enabled=True)]
 
-PAGES = [assignment_marks_scatter, assignment_marks_bar]
+@mpld3_page
+def assignment_marks_hist():
+    course_start_date = datetime.strptime(
+        gen_data['studentCourseDetails'][0]['beginDate'], "%Y-%m-%d").date()
+    course_length = gen_data['studentCourseDetails'][-1]['courseYearLength']
+
+    # This is imprecise but it's ok as no marks fall near the boundaries
+    breakpoints = [course_start_date + timedelta(days=i*365)
+        for i in range(0, course_length+1)]
+    marks_per_year: list[int] = []
+    for i in range(1, len(breakpoints)):
+        in_year_marks = []
+        for ass in ass_data["historicAssignments"]:
+            if "AEP submissions" in ass['name'] or not ass['hasFeedback']:
+                continue
+
+            ass_date = datetime.fromisoformat(ass['studentDeadline']).date()
+            if breakpoints[i-1] < ass_date < breakpoints[i]:
+                in_year_marks.append(ass['feedback']['mark'])
+        if in_year_marks:
+            marks_per_year.append(in_year_marks)
+
+    years = [f"Y{i}" for i in range(1, len(marks_per_year)+1)]
+    min_mark = min([min(l) for l in marks_per_year])
+    max_mark = max([max(l) for l in marks_per_year])
+
+    # Go horizontal then vertical
+    # Only tested for up to 4 years
+    layout = (max(1, len(marks_per_year)//2), min(2, len(marks_per_year)))
+    fig, ax = plt.subplots(*layout, sharey=True, figsize=FIG_SIZE)
+    for i, marks_in_year in enumerate(marks_per_year):
+        TWENTY_POINT_MARKING_POINTS = [0, 12, 25, 32, 38, 42, 45, 48, 52, 55,
+            58, 62, 65, 68, 74, 78, 82, 88, 94, 100]
+        bins = [m for m in TWENTY_POINT_MARKING_POINTS
+            if min_mark <= m <= max_mark]
+        ax[i].hist(marks_in_year, bins=bins, range=(min_mark, max_mark),
+            edgecolor = "black")
+    # Padding is required for the bottom to not get cut off
+    fig.tight_layout(pad=2)
+    return fig, [mpld3.plugins.Zoom(button=True, enabled=True)]
+
+PAGES = [assignment_marks_scatter, assignment_marks_bar, assignment_marks_hist]
 @route('/p<page_number:int>')
 def general_page(page_number: int) -> str:
     return PAGES[page_number - 1]() + generate_prev_next_buttons(page_number)
