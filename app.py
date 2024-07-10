@@ -119,32 +119,6 @@ def get_marks_per_year():
             marks_per_year.append(in_year_marks)
     return marks_per_year
 
-@mpld3_page
-def assignment_marks_bar():
-    counts: list[Counter[int]] = [Counter(l) for l in get_marks_per_year()]
-    years = [f"Y{i}" for i in range(1, len(counts)+1)]
-    marks = range(0, 101)
-    df = pd.DataFrame(data=None, columns=years, index=marks, dtype=np.int8)
-    for year_sub_1, counter in enumerate(counts):
-        df[f"Y{year_sub_1 + 1}"] = pd.Series(counter)
-    colapsed = df.dropna(how="all")
-    min_mark = colapsed.index.min()
-    max_mark = colapsed.index.max()
-    df = df.fillna(0)
-
-    # Go horizontal then vertical
-    # Only tested for up to 4 years
-    layout = (max(1, len(counts)//2), min(2, len(counts)))
-    fig, ax = plt.subplots(figsize=FIG_SIZE)
-    subs = df.plot.bar(ax=ax, xlabel="Mark", ylabel="Frequency",
-        subplots=True, sharey=True, layout=layout)
-    for sub in subs:
-        for sub_ax in sub:
-            sub_ax.set_xbound(min_mark-1, max_mark+1)
-    # Padding is required for the bottom to not get cut off
-    fig.tight_layout(pad=2)
-    return fig, [mpld3.plugins.Zoom(button=True, enabled=True)]
-
 def generate_mark_bins(min_mark, max_mark):
     # The 20 point marking scale is a natural choice of bins
     TWENTY_POINTS = [0, 12, 25, 32, 38, 42, 45, 48, 52, 55, 58, 62,
@@ -208,8 +182,7 @@ def module_marks_hist():
     fig.tight_layout(pad=2)
     return fig, [mpld3.plugins.Zoom(button=True, enabled=True)]
 
-PAGES = [assignment_marks_scatter, assignment_marks_bar, assignment_marks_hist,
-    module_marks_hist]
+PAGES = [assignment_marks_scatter, assignment_marks_hist, module_marks_hist]
 @route('/p<page_number:int>')
 def general_page(page_number: int) -> str:
     return PAGES[page_number - 1]() + generate_prev_next_buttons(page_number)
