@@ -1,4 +1,4 @@
-from collections import Counter
+from collections import Counter, defaultdict
 from datetime import date, datetime, timedelta
 import json
 
@@ -145,6 +145,19 @@ def assignment_marks_bar():
     fig.tight_layout(pad=2)
     return fig, [mpld3.plugins.Zoom(button=True, enabled=True)]
 
+def generate_mark_bins(min_mark, max_mark):
+    # The 20 point marking scale is a natural choice of bins
+    TWENTY_POINTS = [0, 12, 25, 32, 38, 42, 45, 48, 52, 55, 58, 62,
+        65, 68, 74, 78, 82, 88, 94, 100]
+    bins = []
+    for i, point in enumerate(TWENTY_POINTS):
+        if i != 0 and max_mark <= TWENTY_POINTS[i-1]:
+            continue
+        if i != len(TWENTY_POINTS) - 1 and min_mark >= TWENTY_POINTS[i+1]:
+            continue
+        bins.append(point)
+    return bins
+
 @mpld3_page
 def assignment_marks_hist():
     marks_per_year = get_marks_per_year()
@@ -152,22 +165,51 @@ def assignment_marks_hist():
     years = [f"Y{i}" for i in range(1, len(marks_per_year)+1)]
     min_mark = min([min(l) for l in marks_per_year])
     max_mark = max([max(l) for l in marks_per_year])
+    bins = generate_mark_bins(min_mark, max_mark)
 
     # Go horizontal then vertical
     # Only tested for up to 4 years
     layout = (max(1, len(marks_per_year)//2), min(2, len(marks_per_year)))
     fig, ax = plt.subplots(*layout, sharey=True, figsize=FIG_SIZE)
+    if len(marks_per_year) == 1:
+        ax = [ax]
     for i, marks_in_year in enumerate(marks_per_year):
-        TWENTY_POINT_MARKING_POINTS = [0, 12, 25, 32, 38, 42, 45, 48, 52, 55,
-            58, 62, 65, 68, 74, 78, 82, 88, 94, 100]
-        bins = [m for m in TWENTY_POINT_MARKING_POINTS
-            if min_mark <= m <= max_mark]
         ax[i].hist(marks_in_year, bins=bins, edgecolor = "black")
     # Padding is required for the bottom to not get cut off
     fig.tight_layout(pad=2)
     return fig, [mpld3.plugins.Zoom(button=True, enabled=True)]
 
-PAGES = [assignment_marks_scatter, assignment_marks_bar, assignment_marks_hist]
+@mpld3_page
+def module_marks_hist():
+    plot_data: dict[str, list[tuple[str, int]]] = defaultdict(list)
+    for module in gen_data['studentCourseDetails'][-1]['moduleRegistrations']:
+        if not module.get('mark'):
+            continue
+
+        module_meta = module['module']
+        plot_data[module['academicYear']].append(
+            (module_meta['code'] + ": " + module_meta['name'], module['mark']))
+
+    years = list(sorted(plot_data.keys(), key=lambda x: int(x.split("/")[0])))
+    min_mark = min(t[1] for l in plot_data.values() for t in l)
+    max_mark = max(t[1] for l in plot_data.values() for t in l)
+    bins = generate_mark_bins(min_mark, max_mark)
+
+    # Go horizontal then vertical
+    # Only tested for up to 4 years
+    layout = (max(1, len(years)//2), min(2, len(years)))
+    fig, ax = plt.subplots(*layout, sharey=True, figsize=FIG_SIZE)
+    if len(years) == 1:
+        ax = [ax]
+    for i, year in enumerate(years):
+        marks_in_year = plot_data[year]
+        ax[i].hist([t[1] for t in marks_in_year], bins=bins, edgecolor = "black")
+    # Padding is required for the bottom to not get cut off
+    fig.tight_layout(pad=2)
+    return fig, [mpld3.plugins.Zoom(button=True, enabled=True)]
+
+PAGES = [assignment_marks_scatter, assignment_marks_bar, assignment_marks_hist,
+    module_marks_hist]
 @route('/p<page_number:int>')
 def general_page(page_number: int) -> str:
     return PAGES[page_number - 1]() + generate_prev_next_buttons(page_number)
