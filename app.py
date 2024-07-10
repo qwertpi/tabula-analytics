@@ -97,30 +97,34 @@ def assignment_marks_scatter():
         mpld3.plugins.PointHTMLTooltip(l1, labels, css=LABEL_STYLE),
         mpld3.plugins.Zoom(button=True, enabled=True)]
 
-@mpld3_page
-def assignment_marks_bar():
+def get_marks_per_year():
     course_start_date = datetime.strptime(
         gen_data['studentCourseDetails'][0]['beginDate'], "%Y-%m-%d").date()
     course_length = gen_data['studentCourseDetails'][-1]['courseYearLength']
-
     # This is imprecise but it's ok as no marks fall near the boundaries
     breakpoints = [course_start_date + timedelta(days=i*365)
         for i in range(0, course_length+1)]
-    counts: list[Counter[str]] = []
+
+    marks_per_year: list[list[int]] = []
     for i in range(1, len(breakpoints)):
-        in_year_marks = []
+        in_year_marks: list[int] = []
         for ass in ass_data["historicAssignments"]:
             if "AEP submissions" in ass['name'] or not ass['hasFeedback']:
                 continue
 
             ass_date = datetime.fromisoformat(ass['studentDeadline']).date()
             if breakpoints[i-1] < ass_date < breakpoints[i]:
-                in_year_marks.append(ass['feedback']['mark'])
+                in_year_marks.append(int(ass['feedback']['mark']))
         if in_year_marks:
-            counts.append(Counter(in_year_marks))
+            marks_per_year.append(in_year_marks)
+    return marks_per_year
 
+@mpld3_page
+def assignment_marks_bar():
+    counts: list[Counter[int]] = [Counter(l) for l in get_marks_per_year()]
+    years = [f"Y{i}" for i in range(1, len(counts)+1)]
     marks = range(0, 101)
-    df = pd.DataFrame(data=None, columns=[f"Y{i}" for i in range(1, len(counts)+1)], index=marks, dtype=np.int8)
+    df = pd.DataFrame(data=None, columns=years, index=marks, dtype=np.int8)
     for year_sub_1, counter in enumerate(counts):
         df[f"Y{year_sub_1 + 1}"] = pd.Series(counter)
     colapsed = df.dropna(how="all")
@@ -143,25 +147,7 @@ def assignment_marks_bar():
 
 @mpld3_page
 def assignment_marks_hist():
-    course_start_date = datetime.strptime(
-        gen_data['studentCourseDetails'][0]['beginDate'], "%Y-%m-%d").date()
-    course_length = gen_data['studentCourseDetails'][-1]['courseYearLength']
-
-    # This is imprecise but it's ok as no marks fall near the boundaries
-    breakpoints = [course_start_date + timedelta(days=i*365)
-        for i in range(0, course_length+1)]
-    marks_per_year: list[int] = []
-    for i in range(1, len(breakpoints)):
-        in_year_marks = []
-        for ass in ass_data["historicAssignments"]:
-            if "AEP submissions" in ass['name'] or not ass['hasFeedback']:
-                continue
-
-            ass_date = datetime.fromisoformat(ass['studentDeadline']).date()
-            if breakpoints[i-1] < ass_date < breakpoints[i]:
-                in_year_marks.append(ass['feedback']['mark'])
-        if in_year_marks:
-            marks_per_year.append(in_year_marks)
+    marks_per_year = get_marks_per_year()
 
     years = [f"Y{i}" for i in range(1, len(marks_per_year)+1)]
     min_mark = min([min(l) for l in marks_per_year])
@@ -176,8 +162,7 @@ def assignment_marks_hist():
             58, 62, 65, 68, 74, 78, 82, 88, 94, 100]
         bins = [m for m in TWENTY_POINT_MARKING_POINTS
             if min_mark <= m <= max_mark]
-        ax[i].hist(marks_in_year, bins=bins, range=(min_mark, max_mark),
-            edgecolor = "black")
+        ax[i].hist(marks_in_year, bins=bins, edgecolor = "black")
     # Padding is required for the bottom to not get cut off
     fig.tight_layout(pad=2)
     return fig, [mpld3.plugins.Zoom(button=True, enabled=True)]
