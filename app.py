@@ -38,10 +38,9 @@ def generate_prev_next_buttons(i: int):
 
     return generate_prev_button(i) + generate_next_button(i)
 
-ass_data = {}
-gen_data = {}
-@route('/')
-def landing():
+data_loaded = False
+
+def load_data():
     with open('data/assignments.json', encoding="utf8") as f:
         global ass_data
         ass_data = json.load(f)
@@ -50,12 +49,28 @@ def landing():
         global gen_data
         gen_data = json.load(f)['member']
 
+    global data_loaded
+    data_loaded = True
+
+@route('/')
+def landing():
+    load_data()
     redirect("/p1", 303)
 
-def assignment_marks_scatter() -> str:
-    if not ass_data:
-        redirect("/", 303)
+def mpld3_page(func):
+    def wrapper(*args, **kwargs) -> str:
+        if not data_loaded:
+            load_data()
 
+        fig, plugins = func(*args, **kwargs)
+        for plugin in plugins:
+            mpld3.plugins.connect(fig, plugin)
+        return mpld3.fig_to_html(fig)
+
+    return wrapper
+
+@mpld3_page
+def assignment_marks_scatter():
     plot_data: list[tuple[str, str, datetime, int]] = []
     for ass in ass_data["historicAssignments"]:
         if "AEP submissions" in ass['name'] or not ass['hasFeedback']:
@@ -78,17 +93,12 @@ def assignment_marks_scatter() -> str:
     plt.xlabel("Deadline")
     plt.ylabel("Mark")
     LABEL_STYLE = ".label{background-color: ghostwhite; border-style: groove;}"
-    plugins = [
+    return fig, [
         mpld3.plugins.PointHTMLTooltip(l1, labels, css=LABEL_STYLE),
         mpld3.plugins.Zoom(button=True, enabled=True)]
-    for plugin in plugins:
-        mpld3.plugins.connect(fig, plugin)
-    return mpld3.fig_to_html(fig)
 
-def assignment_marks_bar() -> str:
-    if not (ass_data and gen_data):
-        redirect("/", 303)
-
+@mpld3_page
+def assignment_marks_bar():
     course_start_date = datetime.strptime(
         gen_data['studentCourseDetails'][0]['beginDate'], "%Y-%m-%d").date()
     course_length = gen_data['studentCourseDetails'][-1]['courseYearLength']
@@ -127,15 +137,13 @@ def assignment_marks_bar() -> str:
     for sub in subs:
         for sub_ax in sub:
             sub_ax.set_xbound(min_mark-1, max_mark+1)
-    plugins = [mpld3.plugins.Zoom(button=True, enabled=True)]
-    for plugin in plugins:
-        mpld3.plugins.connect(fig, plugin)
     # Padding is required for the bottom to not get cut off
     fig.tight_layout(pad=2)
-    return mpld3.fig_to_html(fig)
+    return fig, [mpld3.plugins.Zoom(button=True, enabled=True)]
 
 PAGES = [assignment_marks_scatter, assignment_marks_bar]
 @route('/p<page_number:int>')
 def general_page(page_number: int) -> str:
     return PAGES[page_number - 1]() + generate_prev_next_buttons(page_number)
+
 app = default_app()
