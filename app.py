@@ -56,7 +56,7 @@ def make_subplots(num):
     # 1 -> (1, 1), 2 -> (1, 2), 3 -> (2, 2), 4 -> (2, 2), 5 -> (2, 3), ...
     width = ceil(sqrt(num))
     height = ceil(num/width)
-    fig, axs = plt.subplots(height, width, sharex=True, sharey=True,
+    fig, axs = plt.subplots(height, width, sharex=False, sharey=True,
         squeeze=False, figsize=FIG_SIZE)
     return fig, axs.flatten()
 
@@ -77,34 +77,6 @@ def mpld3_page(func):
 
     return wrapper
 
-@mpld3_page
-def assignment_marks_scatter():
-    plot_data: list[tuple[str, str, datetime, int]] = []
-    for ass in ass_data["historicAssignments"]:
-        if "AEP submissions" in ass['name'] or not ass['hasFeedback']:
-            continue
-
-        timestamp = datetime.fromisoformat(ass['studentDeadline'])
-        plot_data.append((ass['module']['code'], ass['name'], timestamp,
-            ass['feedback']['mark']))
-
-    # Sort by timestamp and generate labels
-    x: tuple[datetime,]
-    y: tuple[int,]
-    labels: tuple[str,]
-    x, y, labels = zip(*sorted([
-        (t[2], t[3], f"<div class='label'>{t[0]}: {t[1]}</div>")
-        for t in plot_data]))
-
-    fig, axs = make_subplots(1)
-    l1 = axs[0].plot(x, y, marker='.', linestyle="None")[0]
-    plt.xlabel("Deadline")
-    plt.ylabel("Mark")
-    LABEL_STYLE = ".label{background-color: ghostwhite; border-style: groove;}"
-    return fig, [
-        mpld3.plugins.PointHTMLTooltip(l1, labels, css=LABEL_STYLE),
-        mpld3.plugins.Zoom(button=True, enabled=True)]
-
 def split_into_years(l: list[Any], get_date: Callable[[Any], date],
     map: Callable[[Any], Any]) -> list[list[Any]]:
     course_start_date = datetime.strptime(
@@ -124,16 +96,38 @@ def split_into_years(l: list[Any], get_date: Callable[[Any], date],
             per_year.append(in_year)
     return per_year
 
-def get_ass_marks_per_year():
-    data: list[tuple[int, date]] = []
+@mpld3_page
+def assignment_marks_scatter():
+    data: list[tuple[str, datetime, int]] = []
     for ass in ass_data["historicAssignments"]:
         if "AEP submissions" in ass['name'] or not ass['hasFeedback']:
             continue
 
-        ass_date = datetime.fromisoformat(ass['studentDeadline']).date()
+        timestamp = datetime.fromisoformat(ass['studentDeadline'])
         mark = int(ass['feedback']['mark'])
-        data.append((mark, ass_date))
-    return split_into_years(data, lambda t: t[1], lambda t: t[0])
+        title = f"{ass['module']['code']}: {ass['name']}"
+        data.append((title, timestamp, mark))
+    marks_per_year = split_into_years(data, lambda t: t[1].date(), lambda t: t)
+
+    years = [f"Y{i}" for i in range(1, len(marks_per_year)+1)]
+
+    fig, axs = make_subplots(len(years))
+    LABEL_STYLE = ".label{background-color: ghostwhite; border-style: groove;}"
+    plugins: list[mpld3.plugins.PluginBase] = [
+        mpld3.plugins.Zoom(button=True, enabled=True)]
+    for ax, marks_in_year in zip(axs, marks_per_year):
+        # Sort by timestamp and generate labels
+        x: tuple[datetime,]
+        y: tuple[int,]
+        labels: tuple[str,]
+        x, y, labels = zip(*sorted([
+            (t[1], t[2], f"<div class='label'>{t[0]}</div>")
+            for t in marks_in_year]))
+        l = ax.plot(x, y, marker='.', linestyle="None")[0]
+        plt.xlabel("Deadline")
+        plt.ylabel("Mark")
+        plugins.append(mpld3.plugins.PointHTMLTooltip(l, labels, css=LABEL_STYLE))
+    return fig, plugins
 
 def generate_mark_bins(min_mark, max_mark):
     # The 20 point marking scale is a natural choice of bins
@@ -150,7 +144,15 @@ def generate_mark_bins(min_mark, max_mark):
 
 @mpld3_page
 def assignment_marks_hist():
-    marks_per_year = get_ass_marks_per_year()
+    data: list[tuple[int, date]] = []
+    for ass in ass_data["historicAssignments"]:
+        if "AEP submissions" in ass['name'] or not ass['hasFeedback']:
+            continue
+
+        ass_date = datetime.fromisoformat(ass['studentDeadline']).date()
+        mark = int(ass['feedback']['mark'])
+        data.append((mark, ass_date))
+    marks_per_year = split_into_years(data, lambda t: t[1], lambda t: t[0])
 
     years = [f"Y{i}" for i in range(1, len(marks_per_year)+1)]
     min_mark = min([min(l) for l in marks_per_year])
