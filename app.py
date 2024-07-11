@@ -1,6 +1,7 @@
 from collections import Counter, defaultdict
 from datetime import date, datetime, timedelta
 import json
+from math import ceil, sqrt
 
 from bottle import default_app, route, redirect # type: ignore
 import matplotlib.pyplot as plt # type: ignore
@@ -52,6 +53,14 @@ def load_data():
     global data_loaded
     data_loaded = True
 
+def make_subplots(num):
+    # 1 -> (1, 1), 2 -> (1, 2), 3 -> (2, 2), 4 -> (2, 2), 5 -> (2, 3), ...
+    width = ceil(sqrt(num))
+    height = ceil(num/width)
+    fig, axs = plt.subplots(height, width, sharex=True, sharey=True,
+        squeeze=False, figsize=FIG_SIZE)
+    return fig, axs.flatten()
+
 @route('/')
 def landing():
     load_data()
@@ -88,8 +97,8 @@ def assignment_marks_scatter():
         (t[2], t[3], f"<div class='label'>{t[0]}: {t[1]}</div>")
         for t in plot_data]))
 
-    fig, ax = plt.subplots(figsize=FIG_SIZE)
-    l1 = ax.plot(x, y, marker='.', linestyle="None")[0]
+    fig, axs = make_subplots(1)
+    l1 = axs[0].plot(x, y, marker='.', linestyle="None")[0]
     plt.xlabel("Deadline")
     plt.ylabel("Mark")
     LABEL_STYLE = ".label{background-color: ghostwhite; border-style: groove;}"
@@ -141,14 +150,9 @@ def assignment_marks_hist():
     max_mark = max([max(l) for l in marks_per_year])
     bins = generate_mark_bins(min_mark, max_mark)
 
-    # Go horizontal then vertical
-    # Only tested for up to 4 years
-    layout = (max(1, len(marks_per_year)//2), min(2, len(marks_per_year)))
-    fig, ax = plt.subplots(*layout, sharey=True, figsize=FIG_SIZE)
-    if len(marks_per_year) == 1:
-        ax = [ax]
-    for i, marks_in_year in enumerate(marks_per_year):
-        ax[i].hist(marks_in_year, bins=bins, edgecolor = "black")
+    fig, axs = make_subplots(len(marks_per_year))
+    for ax, marks_in_year in zip(axs, marks_per_year):
+        ax.hist(marks_in_year, bins=bins, edgecolor = "black")
     # Padding is required for the bottom to not get cut off
     fig.tight_layout(pad=2)
     return fig, [mpld3.plugins.Zoom(button=True, enabled=True)]
@@ -169,15 +173,10 @@ def module_marks_hist():
     max_mark = max(t[1] for l in plot_data.values() for t in l)
     bins = generate_mark_bins(min_mark, max_mark)
 
-    # Go horizontal then vertical
-    # Only tested for up to 4 years
-    layout = (max(1, len(years)//2), min(2, len(years)))
-    fig, ax = plt.subplots(*layout, sharey=True, figsize=FIG_SIZE)
-    if len(years) == 1:
-        ax = [ax]
-    for i, year in enumerate(years):
+    fig, axs = make_subplots(len(years))
+    for ax, year in zip(axs, years):
         marks_in_year = plot_data[year]
-        ax[i].hist([t[1] for t in marks_in_year], bins=bins, edgecolor = "black")
+        ax.hist([t[1] for t in marks_in_year], bins=bins, edgecolor = "black")
     # Padding is required for the bottom to not get cut off
     fig.tight_layout(pad=2)
     return fig, [mpld3.plugins.Zoom(button=True, enabled=True)]
