@@ -73,6 +73,8 @@ def mpld3_page(func):
         fig, plugins = func(*args, **kwargs)
         for plugin in plugins + [mpld3.plugins.Zoom()]:
             mpld3.plugins.connect(fig, plugin)
+        # Padding is required for the bottom to not get cut off
+        fig.tight_layout(pad=2)
         return mpld3.fig_to_html(fig)
 
     return wrapper
@@ -169,7 +171,6 @@ def assignment_marks_delta_scatter():
             "(depicted as if midday 1st June was the deadline)")
         ax.yaxis.set_label("Mark")
         plugins.append(mpld3.plugins.PointHTMLTooltip(l, labels, css=LABEL_STYLE))
-    plt.tight_layout(pad=2)
     return fig, plugins
 
 def generate_mark_bins(min_mark, max_mark):
@@ -205,8 +206,6 @@ def assignment_marks_hist():
     fig, axs = make_subplots(len(marks_per_year), True)
     for ax, marks_in_year in zip(axs, marks_per_year):
         ax.hist(marks_in_year, bins=bins, edgecolor = "black")
-    # Padding is required for the bottom to not get cut off
-    fig.tight_layout(pad=2)
     return fig, []
 
 @mpld3_page
@@ -229,8 +228,6 @@ def module_marks_hist():
     for ax, year in zip(axs, years):
         marks_in_year = plot_data[year]
         ax.hist([t[1] for t in marks_in_year], bins=bins, edgecolor = "black")
-    # Padding is required for the bottom to not get cut off
-    fig.tight_layout(pad=2)
     return fig, []
 
 PAGES = [assignment_marks_scatter, assignment_marks_delta_scatter,
