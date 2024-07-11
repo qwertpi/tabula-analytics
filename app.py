@@ -1,13 +1,12 @@
-from collections import Counter, defaultdict
+from collections import defaultdict
 from datetime import date, datetime, timedelta
 import json
 from math import ceil, sqrt
+from typing import Any, Callable
 
 from bottle import default_app, route, redirect # type: ignore
 import matplotlib.pyplot as plt # type: ignore
 import mpld3 # type: ignore
-import numpy as np
-import pandas as pd
 
 SCALE = 0.8
 FIG_SIZE = (16*SCALE, 9*SCALE)
@@ -106,27 +105,35 @@ def assignment_marks_scatter():
         mpld3.plugins.PointHTMLTooltip(l1, labels, css=LABEL_STYLE),
         mpld3.plugins.Zoom(button=True, enabled=True)]
 
-def get_marks_per_year():
+def split_into_years(l: list[Any], get_date: Callable[[Any], date],
+    map: Callable[[Any], Any]) -> list[list[Any]]:
     course_start_date = datetime.strptime(
         gen_data['studentCourseDetails'][0]['beginDate'], "%Y-%m-%d").date()
-    course_length = gen_data['studentCourseDetails'][-1]['courseYearLength']
+    course_length = int(gen_data['studentCourseDetails'][-1]['courseYearLength'])
     # This is imprecise but it's ok as no marks fall near the boundaries
-    breakpoints = [course_start_date + timedelta(days=i*365)
+    breakpoints: list[date] = [course_start_date + timedelta(days=i*365)
         for i in range(0, course_length+1)]
 
-    marks_per_year: list[list[int]] = []
+    per_year: list[list[Any]] = []
     for i in range(1, len(breakpoints)):
-        in_year_marks: list[int] = []
-        for ass in ass_data["historicAssignments"]:
-            if "AEP submissions" in ass['name'] or not ass['hasFeedback']:
-                continue
+        in_year: list[Any] = []
+        for el in l:
+            if breakpoints[i-1] < get_date(el) < breakpoints[i]:
+                in_year.append(map(el))
+        if in_year:
+            per_year.append(in_year)
+    return per_year
 
-            ass_date = datetime.fromisoformat(ass['studentDeadline']).date()
-            if breakpoints[i-1] < ass_date < breakpoints[i]:
-                in_year_marks.append(int(ass['feedback']['mark']))
-        if in_year_marks:
-            marks_per_year.append(in_year_marks)
-    return marks_per_year
+def get_ass_marks_per_year():
+    data: list[tuple[int, date]] = []
+    for ass in ass_data["historicAssignments"]:
+        if "AEP submissions" in ass['name'] or not ass['hasFeedback']:
+            continue
+
+        ass_date = datetime.fromisoformat(ass['studentDeadline']).date()
+        mark = int(ass['feedback']['mark'])
+        data.append((mark, ass_date))
+    return split_into_years(data, lambda t: t[1], lambda t: t[0])
 
 def generate_mark_bins(min_mark, max_mark):
     # The 20 point marking scale is a natural choice of bins
@@ -143,7 +150,7 @@ def generate_mark_bins(min_mark, max_mark):
 
 @mpld3_page
 def assignment_marks_hist():
-    marks_per_year = get_marks_per_year()
+    marks_per_year = get_ass_marks_per_year()
 
     years = [f"Y{i}" for i in range(1, len(marks_per_year)+1)]
     min_mark = min([min(l) for l in marks_per_year])
