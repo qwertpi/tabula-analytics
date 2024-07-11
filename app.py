@@ -52,11 +52,11 @@ def load_data():
     global data_loaded
     data_loaded = True
 
-def make_subplots(num):
+def make_subplots(num, sharex):
     # 1 -> (1, 1), 2 -> (1, 2), 3 -> (2, 2), 4 -> (2, 2), 5 -> (2, 3), ...
     width = ceil(sqrt(num))
     height = ceil(num/width)
-    fig, axs = plt.subplots(height, width, sharex=False, sharey=True,
+    fig, axs = plt.subplots(height, width, sharex=sharex, sharey=True,
         squeeze=False, figsize=FIG_SIZE)
     return fig, axs.flatten()
 
@@ -111,7 +111,7 @@ def assignment_marks_scatter():
 
     years = [f"Y{i}" for i in range(1, len(marks_per_year)+1)]
 
-    fig, axs = make_subplots(len(years))
+    fig, axs = make_subplots(len(years), False)
     LABEL_STYLE = ".label{background-color: ghostwhite; border-style: groove;}"
     plugins: list[mpld3.plugins.PluginBase] = [
         mpld3.plugins.Zoom(button=True, enabled=True)]
@@ -127,6 +127,51 @@ def assignment_marks_scatter():
         plt.xlabel("Deadline")
         plt.ylabel("Mark")
         plugins.append(mpld3.plugins.PointHTMLTooltip(l, labels, css=LABEL_STYLE))
+    return fig, plugins
+
+@mpld3_page
+def assignment_marks_delta_scatter():
+    data: list[tuple[date, str, datetime, int]] = []
+    for ass in ass_data["historicAssignments"]:
+        submission_data = ass.get("submission")
+        if "AEP submissions" in ass['name'] or not ass['hasFeedback'] or not submission_data:
+            continue
+
+        deadline = datetime.fromisoformat(ass['studentDeadline'])
+        submission_time = datetime.fromisoformat(
+            submission_data['submittedDate'])
+        delta = deadline - submission_time
+        # matplotlib only handles datetime not timedelta
+        base = datetime.today().replace(day=1, month=6, hour=12, minute=0, second=0)
+        delta_as_datetime = base - delta
+        mark = int(ass['feedback']['mark'])
+        title = f"{ass['module']['code']}: {ass['name']}"
+        data.append((deadline.date(), title, delta_as_datetime, mark))
+    marks_per_year = split_into_years(data, lambda t: t[0], lambda t: t[1:])
+    min_mark = min([t[2]  for l in marks_per_year for t in l])
+    max_mark = max([t[2]  for l in marks_per_year for t in l])
+    years = [f"Y{i}" for i in range(1, len(marks_per_year)+1)]
+
+    fig, axs = make_subplots(len(years), True)
+    LABEL_STYLE = ".label{background-color: ghostwhite; border-style: groove;}"
+    plugins: list[mpld3.plugins.PluginBase] = [
+        mpld3.plugins.Zoom(button=True, enabled=True)]
+    mark_spread = range(min_mark, max_mark+1)
+    for ax, marks_in_year in zip(axs, marks_per_year):
+        # Sort by timestamp and generate labels
+        x: tuple[timedelta,]
+        y: tuple[int,]
+        labels: tuple[str,]
+        x, y, labels = zip(*sorted([
+            (t[1], t[2], f"<div class='label'>{t[0] + "<br>" + t[1].strftime("%X")}</div>")
+            for t in marks_in_year]))
+        l = ax.plot(x, y, marker='.', linestyle="None")[0]
+        ax.plot([base]*len(mark_spread), mark_spread, marker="None", linestyle="-")
+        ax.xaxis.set_label("Proximity to deadline "+
+            "(depicted as if midday 1st June was the deadline)")
+        ax.yaxis.set_label("Mark")
+        plugins.append(mpld3.plugins.PointHTMLTooltip(l, labels, css=LABEL_STYLE))
+    plt.tight_layout(pad=2)
     return fig, plugins
 
 def generate_mark_bins(min_mark, max_mark):
@@ -159,7 +204,7 @@ def assignment_marks_hist():
     max_mark = max([max(l) for l in marks_per_year])
     bins = generate_mark_bins(min_mark, max_mark)
 
-    fig, axs = make_subplots(len(marks_per_year))
+    fig, axs = make_subplots(len(marks_per_year), True)
     for ax, marks_in_year in zip(axs, marks_per_year):
         ax.hist(marks_in_year, bins=bins, edgecolor = "black")
     # Padding is required for the bottom to not get cut off
@@ -182,7 +227,7 @@ def module_marks_hist():
     max_mark = max(t[1] for l in plot_data.values() for t in l)
     bins = generate_mark_bins(min_mark, max_mark)
 
-    fig, axs = make_subplots(len(years))
+    fig, axs = make_subplots(len(years), True)
     for ax, year in zip(axs, years):
         marks_in_year = plot_data[year]
         ax.hist([t[1] for t in marks_in_year], bins=bins, edgecolor = "black")
@@ -190,7 +235,8 @@ def module_marks_hist():
     fig.tight_layout(pad=2)
     return fig, [mpld3.plugins.Zoom(button=True, enabled=True)]
 
-PAGES = [assignment_marks_scatter, assignment_marks_hist, module_marks_hist]
+PAGES = [assignment_marks_scatter, assignment_marks_delta_scatter,
+    assignment_marks_hist, module_marks_hist]
 @route('/p<page_number:int>')
 def general_page(page_number: int) -> str:
     return PAGES[page_number - 1]() + generate_prev_next_buttons(page_number)
