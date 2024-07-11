@@ -71,7 +71,7 @@ def mpld3_page(func):
             load_data()
 
         fig, plugins = func(*args, **kwargs)
-        for plugin in plugins:
+        for plugin in plugins + [mpld3.plugins.Zoom()]:
             mpld3.plugins.connect(fig, plugin)
         return mpld3.fig_to_html(fig)
 
@@ -113,8 +113,7 @@ def assignment_marks_scatter():
 
     fig, axs = make_subplots(len(years), False)
     LABEL_STYLE = ".label{background-color: ghostwhite; border-style: groove;}"
-    plugins: list[mpld3.plugins.PluginBase] = [
-        mpld3.plugins.Zoom(button=True, enabled=True)]
+    plugins: list[mpld3.plugins.PluginBase] = []
     for ax, marks_in_year in zip(axs, marks_per_year):
         # Sort by timestamp and generate labels
         x: tuple[datetime,]
@@ -154,8 +153,7 @@ def assignment_marks_delta_scatter():
 
     fig, axs = make_subplots(len(years), True)
     LABEL_STYLE = ".label{background-color: ghostwhite; border-style: groove;}"
-    plugins: list[mpld3.plugins.PluginBase] = [
-        mpld3.plugins.Zoom(button=True, enabled=True)]
+    plugins: list[mpld3.plugins.PluginBase] = []
     mark_spread = range(min_mark, max_mark+1)
     for ax, marks_in_year in zip(axs, marks_per_year):
         # Sort by timestamp and generate labels
@@ -209,7 +207,7 @@ def assignment_marks_hist():
         ax.hist(marks_in_year, bins=bins, edgecolor = "black")
     # Padding is required for the bottom to not get cut off
     fig.tight_layout(pad=2)
-    return fig, [mpld3.plugins.Zoom(button=True, enabled=True)]
+    return fig, []
 
 @mpld3_page
 def module_marks_hist():
@@ -233,7 +231,7 @@ def module_marks_hist():
         ax.hist([t[1] for t in marks_in_year], bins=bins, edgecolor = "black")
     # Padding is required for the bottom to not get cut off
     fig.tight_layout(pad=2)
-    return fig, [mpld3.plugins.Zoom(button=True, enabled=True)]
+    return fig, []
 
 PAGES = [assignment_marks_scatter, assignment_marks_delta_scatter,
     assignment_marks_hist, module_marks_hist]
