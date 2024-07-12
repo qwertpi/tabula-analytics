@@ -82,7 +82,7 @@ def mpld3_page(func):
 T = TypeVar("T")
 U = TypeVar("U")
 def split_into_years(l: list[T], get_date: Callable[[T], date],
-    map: Callable[[T], U]) -> list[list[U]]:
+    map: Callable[[T], U]):
     course_start_date = datetime.strptime(
         gen_data['studentCourseDetails'][0]['beginDate'], "%Y-%m-%d").date()
     course_length = int(gen_data['studentCourseDetails'][-1]['courseYearLength'])
@@ -91,14 +91,16 @@ def split_into_years(l: list[T], get_date: Callable[[T], date],
         for i in range(0, course_length+1)]
 
     per_year: list[list[U]] = []
+    years: list[str] = []
     for i in range(1, len(breakpoints)):
         in_year: list[U] = []
         for el in l:
             if breakpoints[i-1] < get_date(el) < breakpoints[i]:
                 in_year.append(map(el))
         if in_year:
+            years.append(f"Y{i}")
             per_year.append(in_year)
-    return per_year
+    return per_year, years
 
 @mpld3_page
 def assignment_marks_scatter():
@@ -111,9 +113,7 @@ def assignment_marks_scatter():
         mark = int(ass['feedback']['mark'])
         title = f"{ass['module']['code']}: {ass['name']}"
         data.append((title, timestamp, mark))
-    marks_per_year = split_into_years(data, lambda t: t[1].date(), lambda t: t)
-
-    years = [f"Y{i}" for i in range(1, len(marks_per_year)+1)]
+    marks_per_year, years = split_into_years(data, lambda t: t[1].date(), lambda t: t)
 
     fig, axs = make_subplots(len(years), False)
     LABEL_STYLE = ".label{background-color: ghostwhite; border-style: groove;}"
@@ -150,10 +150,9 @@ def assignment_marks_delta_scatter():
         mark = int(ass['feedback']['mark'])
         title = f"{ass['module']['code']}: {ass['name']}"
         data.append((deadline.date(), title, delta_as_datetime, mark))
-    marks_per_year = split_into_years(data, lambda t: t[0], lambda t: t[1:])
+    marks_per_year, years = split_into_years(data, lambda t: t[0], lambda t: t[1:])
     min_mark = min([t[2]  for l in marks_per_year for t in l])
     max_mark = max([t[2]  for l in marks_per_year for t in l])
-    years = [f"Y{i}" for i in range(1, len(marks_per_year)+1)]
 
     fig, axs = make_subplots(len(years), True)
     LABEL_STYLE = ".label{background-color: ghostwhite; border-style: groove;}"
@@ -198,9 +197,8 @@ def assignment_marks_hist():
         ass_date = datetime.fromisoformat(ass['studentDeadline']).date()
         mark = int(ass['feedback']['mark'])
         data.append((mark, ass_date))
-    marks_per_year = split_into_years(data, lambda t: t[1], lambda t: t[0])
+    marks_per_year, years = split_into_years(data, lambda t: t[1], lambda t: t[0])
 
-    years = [f"Y{i}" for i in range(1, len(marks_per_year)+1)]
     min_mark = min([min(l) for l in marks_per_year])
     max_mark = max([max(l) for l in marks_per_year])
     bins = generate_mark_bins(min_mark, max_mark)
