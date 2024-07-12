@@ -2,7 +2,7 @@ from collections import defaultdict
 from datetime import date, datetime, timedelta
 import json
 from math import ceil, sqrt
-from typing import Any, Callable
+from typing import Callable, TypeVar
 
 from bottle import default_app, route, redirect # type: ignore
 import matplotlib.pyplot as plt # type: ignore
@@ -79,8 +79,10 @@ def mpld3_page(func):
 
     return wrapper
 
-def split_into_years(l: list[Any], get_date: Callable[[Any], date],
-    map: Callable[[Any], Any]) -> list[list[Any]]:
+T = TypeVar("T")
+U = TypeVar("U")
+def split_into_years(l: list[T], get_date: Callable[[T], date],
+    map: Callable[[T], U]) -> list[list[U]]:
     course_start_date = datetime.strptime(
         gen_data['studentCourseDetails'][0]['beginDate'], "%Y-%m-%d").date()
     course_length = int(gen_data['studentCourseDetails'][-1]['courseYearLength'])
@@ -88,9 +90,9 @@ def split_into_years(l: list[Any], get_date: Callable[[Any], date],
     breakpoints: list[date] = [course_start_date + timedelta(days=i*365)
         for i in range(0, course_length+1)]
 
-    per_year: list[list[Any]] = []
+    per_year: list[list[U]] = []
     for i in range(1, len(breakpoints)):
-        in_year: list[Any] = []
+        in_year: list[U] = []
         for el in l:
             if breakpoints[i-1] < get_date(el) < breakpoints[i]:
                 in_year.append(map(el))
