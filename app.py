@@ -102,6 +102,10 @@ def split_into_years(l: list[T], get_date: Callable[[T], date],
             per_year.append(in_year)
     return per_year, years
 
+def general_2d_min_max(l: list[list[T]], map: Callable[[T], U]) -> tuple[U, U]:
+    relevant = [map(e) for inner_l in l for e in inner_l]
+    return min(relevant), max(relevant)
+
 @mpld3_page
 def assignment_marks_scatter():
     data: list[tuple[str, datetime, int]] = []
@@ -151,8 +155,7 @@ def assignment_marks_delta_scatter():
         title = f"{ass['module']['code']}: {ass['name']}"
         data.append((deadline.date(), title, delta_as_datetime, mark))
     marks_per_year, years = split_into_years(data, lambda t: t[0], lambda t: t[1:])
-    min_mark = min([t[2]  for l in marks_per_year for t in l])
-    max_mark = max([t[2]  for l in marks_per_year for t in l])
+    min_mark, max_mark = general_2d_min_max(marks_per_year, lambda t: t[2])
 
     fig, axs = make_subplots(len(years), True)
     LABEL_STYLE = ".label{background-color: ghostwhite; border-style: groove;}"
@@ -199,8 +202,7 @@ def assignment_marks_hist():
         data.append((mark, ass_date))
     marks_per_year, years = split_into_years(data, lambda t: t[1], lambda t: t[0])
 
-    min_mark = min([min(l) for l in marks_per_year])
-    max_mark = max([max(l) for l in marks_per_year])
+    min_mark, max_mark = general_2d_min_max(marks_per_year, lambda x: x)
     bins = generate_mark_bins(min_mark, max_mark)
 
     fig, axs = make_subplots(len(marks_per_year), True)
@@ -220,8 +222,7 @@ def module_marks_hist():
             (module_meta['code'] + ": " + module_meta['name'], module['mark']))
 
     years = list(sorted(plot_data.keys(), key=lambda x: int(x.split("/")[0])))
-    min_mark = min(t[1] for l in plot_data.values() for t in l)
-    max_mark = max(t[1] for l in plot_data.values() for t in l)
+    min_mark, max_mark = general_2d_min_max(plot_data.values(), lambda t: t[1])
     bins = generate_mark_bins(min_mark, max_mark)
 
     fig, axs = make_subplots(len(years), True)
