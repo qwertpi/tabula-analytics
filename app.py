@@ -1,13 +1,14 @@
 from collections import defaultdict
 from datetime import date, datetime, timedelta
-from itertools import count
 import json
 from math import ceil, sqrt
-from typing import Callable, Optional, TypeVar
+from typing import Callable, Iterable, Optional, TypeVar
 
 from bottle import default_app, route, redirect # type: ignore
 import matplotlib.pyplot as plt # type: ignore
 import mpld3 # type: ignore
+import numpy as np
+from sklearn.linear_model import LinearRegression # type: ignore
 
 SCALE = 0.8
 FIG_SIZE = (16*SCALE, 9*SCALE)
@@ -103,11 +104,17 @@ def split_into_years(l: list[T], get_date: Callable[[T], date],
             per_year.append(in_year)
     return per_year, years
 
-def general_2d_min_max(l: list[list[T]], map: Callable[[T], U]) -> tuple[U, U]:
+def general_2d_min_max(l: Iterable[Iterable[T]], map: Callable[[T], U]) -> tuple[U, U]:
     relevant = [map(e) for inner_l in l for e in inner_l]
     return min(relevant), max(relevant)
 
 LABEL_STYLE = ".label{background-color: ghostwhite; border-style: groove;}"
+
+def plot_regression_line(xs: Iterable[datetime], ys: Iterable[int], ax):
+    reg_x = [x.timestamp() for x in xs]
+    reg_model = LinearRegression().fit(np.array(reg_x).reshape(-1, 1), ys)
+    ys_reg = [reg_model.predict(np.array(x).reshape(-1, 1)) for x in reg_x]
+    ax.plot(xs, ys_reg, '-')
 
 @mpld3_page
 def assignment_marks_scatter():
@@ -132,6 +139,8 @@ def assignment_marks_scatter():
         x, y, labels = zip(*sorted([
             (t[1], t[2], f"<div class='label'>{t[0]}</div>")
             for t in marks_in_year]))
+
+        plot_regression_line(x, y, ax)
         l = ax.plot(x, y, marker='.', linestyle="None")[0]
         plt.xlabel("Deadline")
         plt.ylabel("Mark")
@@ -165,14 +174,15 @@ def assignment_marks_delta_scatter():
     mark_spread = range(min_mark, max_mark+1)
     for ax, marks_in_year in zip(axs, marks_per_year):
         # Sort by timestamp and generate labels
-        x: tuple[timedelta,]
+        x: tuple[datetime,]
         y: tuple[int,]
         labels: tuple[str,]
         x, y, labels = zip(*sorted([
             (t[1], t[2], f"<div class='label'>{t[0] + "<br>" + t[1].strftime("%X")}</div>")
             for t in marks_in_year]))
+        ax.plot([base]*len(mark_spread), mark_spread, marker="None", linestyle="--")
+        plot_regression_line(x, y, ax)
         l = ax.plot(x, y, marker='.', linestyle="None")[0]
-        ax.plot([base]*len(mark_spread), mark_spread, marker="None", linestyle="-")
         ax.xaxis.set_label("Proximity to deadline "+
             "(depicted as if midday 1st June was the deadline)")
         ax.yaxis.set_label("Mark")
@@ -257,6 +267,8 @@ def module_marks_hist():
     plot_data: dict[str, list[int]] = {k: [m for m, l in d.items() for _ in l]
         for k, d in mark_to_module.items()}
     years = list(sorted(plot_data.keys(), key=lambda x: int(x.split("/")[0])))
+    min_mark: int
+    max_mark: int
     min_mark, max_mark = general_2d_min_max(plot_data.values(), lambda t: t)
     bins = generate_mark_bins(min_mark, max_mark)
 
