@@ -245,24 +245,29 @@ def assignment_marks_hist():
 
 @mpld3_page
 def module_marks_hist():
-    plot_data: dict[str, list[tuple[str, int]]] = defaultdict(list)
+    mark_to_module: dict[str, dict[int, list[str]]] = defaultdict(lambda: defaultdict(list))
     for module in gen_data['studentCourseDetails'][-1]['moduleRegistrations']:
         if not module.get('mark'):
             continue
 
-        module_meta = module['module']
-        plot_data[module['academicYear']].append(
-            (module_meta['code'] + ": " + module_meta['name'], module['mark']))
+        module_name = (module['module']['code'].upper() + ": " +
+            module['module']['name'])
+        mark_to_module[module['academicYear']][module['mark']].append(module_name)
 
+    plot_data: dict[str, list[int]] = {k: [m for m, l in d.items() for _ in l]
+        for k, d in mark_to_module.items()}
     years = list(sorted(plot_data.keys(), key=lambda x: int(x.split("/")[0])))
-    min_mark, max_mark = general_2d_min_max(plot_data.values(), lambda t: t[1])
+    min_mark, max_mark = general_2d_min_max(plot_data.values(), lambda t: t)
     bins = generate_mark_bins(min_mark, max_mark)
 
     fig, axs = make_subplots(len(years), True)
+    plugins = []
     for ax, year in zip(axs, years):
         marks_in_year = plot_data[year]
-        ax.hist([t[1] for t in marks_in_year], bins=bins, edgecolor = "black")
-    return fig, []
+        mark_to_module_in_year = mark_to_module[year]
+        labels = generate_bin_labels(marks_in_year, mark_to_module_in_year, bins)
+        plugins += plot_histogram_with_labels(marks_in_year, bins, labels, ax)
+    return fig, plugins
 
 PAGES = [assignment_marks_scatter, assignment_marks_delta_scatter,
     assignment_marks_hist, module_marks_hist]
