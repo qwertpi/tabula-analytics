@@ -1,6 +1,5 @@
 from collections import defaultdict
 from datetime import date, datetime, timedelta
-from functools import partial
 import json
 from math import ceil, sqrt
 from typing import Callable, Iterable, Optional, TypeVar
@@ -9,7 +8,7 @@ from bottle import default_app, route, redirect # type: ignore
 import matplotlib.pyplot as plt # type: ignore
 import mpld3 # type: ignore
 import numpy as np
-from scipy.stats import norm
+from scipy.stats import norm # type: ignore
 from sklearn.linear_model import LinearRegression # type: ignore
 
 SCALE = 0.8
@@ -227,19 +226,10 @@ def plot_histogram_with_labels(data: list[int], bins: list[int], bin_labels: lis
 
 def plot_hist_gaus_model(data: list[int], bins: list[int], ax, **kwargs):
     mean, std = norm.fit(data)
-    cdf = partial(norm.cdf, loc=mean, scale=std)
-    midpoints = []
-    widths = []
-    model = []
-    lower = bins[0]
-    upper: Optional[int] = None
-    for upper in bins[1:]:
-        midpoints.append((lower + upper)/2)
-        widths.append(upper - lower)
-        p = cdf(upper) - cdf(lower)
-        model.append(p * len(data))
-        lower = upper
-    ax.bar(midpoints, model, widths, edgecolor="black", **kwargs)
+    x = range(bins[0], bins[-1]+1)
+    y = norm.pdf(x, loc=mean, scale=std)
+    scale = ax.get_ylim()[1]/y.max()
+    ax.plot(x, scale * y)
 
 @mpld3_page
 def assignment_marks_hist():
