@@ -192,6 +192,27 @@ def generate_mark_bins(min_mark, max_mark):
         bins.append(point)
     return bins
 
+def generate_bin_labels(data: list[int], data_to_labels: dict[int, list[str]], bins: list[int]):
+    bin_labels: list[str] = []
+    lower = bins[0]
+    upper: Optional[int] = None
+    for upper in bins[1:]:
+        bin_labels.append("<br>".join(
+            [label for point in range(lower, upper)
+                for label in data_to_labels[point]]))
+        lower = upper
+    bin_labels[-1] += "<br>" + "<br>".join([label for label in data_to_labels[lower]])
+    return bin_labels
+
+def plot_histogram_with_labels(data: list[int], bins: list[int], bin_labels: list[str], ax):
+    plugins = []
+    bars = ax.hist(data, bins=bins, edgecolor = "black")[2]
+    for bar, label in zip(bars.get_children(), bin_labels):
+        tooltip = mpld3.plugins.LineHTMLTooltip(bar,
+            label=f"<div class='label'>{label}</div>", css=LABEL_STYLE)
+        plugins.append(tooltip)
+    return plugins
+
 @mpld3_page
 def assignment_marks_hist():
     data: list[tuple[int, str, date]] = []
@@ -206,29 +227,20 @@ def assignment_marks_hist():
 
     per_year_data, years = split_into_years(data, lambda t: t[2], lambda t: t[0:2])
     mark_to_ass: list[dict[int, list[str]]] = [defaultdict(list) for _ in years]
-    marks_per_year: list[list[int]] = [[] for _ in years]
     for i, year in enumerate(per_year_data):
         for mark, ass_name in year:
             mark_to_ass[i][mark].append(ass_name)
-            marks_per_year[i].append(mark)
+    marks_per_year = [[key for key, l in d.items() for _ in l]
+        for d in mark_to_ass]
 
     min_mark, max_mark = general_2d_min_max(marks_per_year, lambda x: x)
     bins = generate_mark_bins(min_mark, max_mark)
     fig, axs = make_subplots(len(marks_per_year), True)
     plugins = []
-    for i, ax, marks_in_year in zip(count(), axs, marks_per_year):
-        bin_labels: list[list[str]] = []
-        lower = bins[0]
-        upper: Optional[int] = None
-        for upper in bins[1:]:
-            bin_labels.append([ass for mark in range(lower, upper) for ass in mark_to_ass[i][mark]])
-            lower = upper
-        bin_labels[-1] += [ass for ass in mark_to_ass[i][lower]]
-
-        bars = ax.hist(marks_in_year, bins=bins, edgecolor = "black")[2]
-        for j, bar in enumerate(bars.get_children()):
-            tooltip = mpld3.plugins.LineHTMLTooltip(bar, label=f"<div class='label'>{"<br>".join(bin_labels[j])}</div>", css=LABEL_STYLE)
-            plugins.append(tooltip)
+    for ax, marks_in_year, mark_to_ass_in_year in zip(
+        axs, marks_per_year, mark_to_ass):
+        labels = generate_bin_labels(marks_in_year, mark_to_ass_in_year, bins)
+        plugins += plot_histogram_with_labels(marks_in_year, bins, labels, ax)
     return fig, plugins
 
 @mpld3_page
