@@ -273,6 +273,8 @@ PAGES = [assignment_marks_scatter, assignment_marks_delta_scatter,
     assignment_marks_hist, module_marks_hist]
 @route('/p<page_number:int>')
 def general_page(page_number: int) -> str:
-    return PAGES[page_number - 1]() + generate_prev_next_buttons(page_number)
+    if 1 <= page_number <= len(PAGES):
+        return PAGES[page_number - 1]() + generate_prev_next_buttons(page_number)
+    return "Nice try"
 
 app = default_app()
