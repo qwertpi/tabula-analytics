@@ -1,8 +1,9 @@
 from collections import defaultdict
 from datetime import date, datetime, timedelta
+from itertools import count
 import json
 from math import ceil, sqrt
-from typing import Callable, TypeVar
+from typing import Callable, Optional, TypeVar
 
 from bottle import default_app, route, redirect # type: ignore
 import matplotlib.pyplot as plt # type: ignore
@@ -106,6 +107,8 @@ def general_2d_min_max(l: list[list[T]], map: Callable[[T], U]) -> tuple[U, U]:
     relevant = [map(e) for inner_l in l for e in inner_l]
     return min(relevant), max(relevant)
 
+LABEL_STYLE = ".label{background-color: ghostwhite; border-style: groove;}"
+
 @mpld3_page
 def assignment_marks_scatter():
     data: list[tuple[str, datetime, int]] = []
@@ -120,7 +123,6 @@ def assignment_marks_scatter():
     marks_per_year, years = split_into_years(data, lambda t: t[1].date(), lambda t: t)
 
     fig, axs = make_subplots(len(years), False)
-    LABEL_STYLE = ".label{background-color: ghostwhite; border-style: groove;}"
     plugins: list[mpld3.plugins.PluginBase] = []
     for ax, marks_in_year in zip(axs, marks_per_year):
         # Sort by timestamp and generate labels
@@ -158,7 +160,7 @@ def assignment_marks_delta_scatter():
     min_mark, max_mark = general_2d_min_max(marks_per_year, lambda t: t[2])
 
     fig, axs = make_subplots(len(years), True)
-    LABEL_STYLE = ".label{background-color: ghostwhite; border-style: groove;}"
+
     plugins: list[mpld3.plugins.PluginBase] = []
     mark_spread = range(min_mark, max_mark+1)
     for ax, marks_in_year in zip(axs, marks_per_year):
@@ -181,7 +183,7 @@ def generate_mark_bins(min_mark, max_mark):
     # The 20 point marking scale is a natural choice of bins
     TWENTY_POINTS = [0, 12, 25, 32, 38, 42, 45, 48, 52, 55, 58, 62,
         65, 68, 74, 78, 82, 88, 94, 100]
-    bins = []
+    bins: list[int] = []
     for i, point in enumerate(TWENTY_POINTS):
         if i != 0 and max_mark <= TWENTY_POINTS[i-1]:
             continue
@@ -192,23 +194,42 @@ def generate_mark_bins(min_mark, max_mark):
 
 @mpld3_page
 def assignment_marks_hist():
-    data: list[tuple[int, date]] = []
+    data: list[tuple[int, str, date]] = []
+
     for ass in ass_data["historicAssignments"]:
         if "AEP submissions" in ass['name'] or not ass['hasFeedback']:
             continue
 
         ass_date = datetime.fromisoformat(ass['studentDeadline']).date()
         mark = int(ass['feedback']['mark'])
-        data.append((mark, ass_date))
-    marks_per_year, years = split_into_years(data, lambda t: t[1], lambda t: t[0])
+        data.append((mark, f"{ass['module']['code']}: {ass['name']}", ass_date))
+
+    per_year_data, years = split_into_years(data, lambda t: t[2], lambda t: t[0:2])
+    mark_to_ass: list[dict[int, list[str]]] = [defaultdict(list) for _ in years]
+    marks_per_year: list[list[int]] = [[] for _ in years]
+    for i, year in enumerate(per_year_data):
+        for mark, ass_name in year:
+            mark_to_ass[i][mark].append(ass_name)
+            marks_per_year[i].append(mark)
 
     min_mark, max_mark = general_2d_min_max(marks_per_year, lambda x: x)
     bins = generate_mark_bins(min_mark, max_mark)
-
     fig, axs = make_subplots(len(marks_per_year), True)
-    for ax, marks_in_year in zip(axs, marks_per_year):
-        ax.hist(marks_in_year, bins=bins, edgecolor = "black")
-    return fig, []
+    plugins = []
+    for i, ax, marks_in_year in zip(count(), axs, marks_per_year):
+        bin_labels: list[list[str]] = []
+        lower = bins[0]
+        upper: Optional[int] = None
+        for upper in bins[1:]:
+            bin_labels.append([ass for mark in range(lower, upper) for ass in mark_to_ass[i][mark]])
+            lower = upper
+        bin_labels[-1] += [ass for ass in mark_to_ass[i][lower]]
+
+        bars = ax.hist(marks_in_year, bins=bins, edgecolor = "black")[2]
+        for j, bar in enumerate(bars.get_children()):
+            tooltip = mpld3.plugins.LineHTMLTooltip(bar, label=f"<div class='label'>{"<br>".join(bin_labels[j])}</div>", css=LABEL_STYLE)
+            plugins.append(tooltip)
+    return fig, plugins
 
 @mpld3_page
 def module_marks_hist():
