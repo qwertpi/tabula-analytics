@@ -1,5 +1,6 @@
 from collections import defaultdict
 from datetime import date, datetime, timedelta
+from functools import partial
 import json
 from math import ceil, sqrt
 from typing import Callable, Iterable, Optional, TypeVar
@@ -8,6 +9,7 @@ from bottle import default_app, route, redirect # type: ignore
 import matplotlib.pyplot as plt # type: ignore
 import mpld3 # type: ignore
 import numpy as np
+from scipy.stats import norm
 from sklearn.linear_model import LinearRegression # type: ignore
 
 SCALE = 0.8
@@ -223,6 +225,22 @@ def plot_histogram_with_labels(data: list[int], bins: list[int], bin_labels: lis
         plugins.append(tooltip)
     return plugins
 
+def plot_hist_gaus_model(data: list[int], bins: list[int], ax, **kwargs):
+    mean, std = norm.fit(data)
+    cdf = partial(norm.cdf, loc=mean, scale=std)
+    midpoints = []
+    widths = []
+    model = []
+    lower = bins[0]
+    upper: Optional[int] = None
+    for upper in bins[1:]:
+        midpoints.append((lower + upper)/2)
+        widths.append(upper - lower)
+        p = cdf(upper) - cdf(lower)
+        model.append(p * len(data))
+        lower = upper
+    ax.bar(midpoints, model, widths, edgecolor="black", **kwargs)
+
 @mpld3_page
 def assignment_marks_hist():
     data: list[tuple[int, str, date]] = []
@@ -251,6 +269,7 @@ def assignment_marks_hist():
         axs, marks_per_year, mark_to_ass):
         labels = generate_bin_labels(marks_in_year, mark_to_ass_in_year, bins)
         plugins += plot_histogram_with_labels(marks_in_year, bins, labels, ax)
+        plot_hist_gaus_model(marks_in_year, bins, ax, color="orange", alpha=0.5)
     return fig, plugins
 
 @mpld3_page
@@ -267,9 +286,7 @@ def module_marks_hist():
     plot_data: dict[str, list[int]] = {k: [m for m, l in d.items() for _ in l]
         for k, d in mark_to_module.items()}
     years = list(sorted(plot_data.keys(), key=lambda x: int(x.split("/")[0])))
-    min_mark: int
-    max_mark: int
-    min_mark, max_mark = general_2d_min_max(plot_data.values(), lambda t: t)
+    min_mark, max_mark = general_2d_min_max(plot_data.values(), lambda t: int(t))
     bins = generate_mark_bins(min_mark, max_mark)
 
     fig, axs = make_subplots(len(years), True)
@@ -279,6 +296,7 @@ def module_marks_hist():
         mark_to_module_in_year = mark_to_module[year]
         labels = generate_bin_labels(marks_in_year, mark_to_module_in_year, bins)
         plugins += plot_histogram_with_labels(marks_in_year, bins, labels, ax)
+        plot_hist_gaus_model(marks_in_year, bins, ax, color="orange", alpha=0.5)
     return fig, plugins
 
 PAGES = [assignment_marks_scatter, assignment_marks_delta_scatter,
