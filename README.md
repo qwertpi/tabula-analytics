@@ -1,8 +1,15 @@
 # tabula-analytics
 The University of Warwick's custom administration system [Tabula](https://warwick.ac.uk/services/its/servicessupport/web/tabula/) has a JSON REST API. This is a collection of Python data visualisations using data fetched from this API.
 
-## Inspiration
-https://github.com/efbicief/warwick-wrapped
+## Disclaimers
+This project is neither affiliated with nor endorsed by the Tabula developers or The University of Warwick more generally.  
+This project is heavily inspired by [Warwick Wrapped](https://github.com/efbicief/warwick-wrapped).
+
+## Screenshots
+![Page 1](screenshots/page1.png?raw=True)
+![Page 2](screenshots/page2.png?raw=True)
+![Page 3](screenshots/page3.png?raw=True)
+![Page 4](screenshots/page4.png?raw=True)
 
 ## Copyright
 Copyright © 2024  Rory Sharp All rights reserved.
@@ -18,10 +25,11 @@ along with this program.  If you have not received this, see <http://www.gnu.org
 For a (non-legally binding) summary of the license see https://tldrlegal.com/license/gnu-general-public-license-v3-(gpl-3)
 
 ## Installation
-1. Install dependencies (TO DO: Details)
+1. `python3 -m pip install -r requirements.txt`
 2. `cp example_config.yaml config.yaml`
+3. `mkdir data`
 
 ## Usage
-* To load your data from Tabula: Log-in in your browser and copy your cookie into config.yaml, then run `python3 fetch_data.py`
-* To run the application: Run `gunicorn app:app` and navigate to http://localhost:8000 in your web browser
+* To (re)load your data from Tabula: Log-in in your browser and copy your cookie into config.yaml, then run `python3 fetch_data.py`
+* To run the application: Run `python3 -m gunicorn app:app` and navigate to http://localhost:8000 in your web browser
 * To delete your local copy of your data (after all it may well contain information you deem sensitive): `bash purge_data.sh`
