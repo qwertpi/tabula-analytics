@@ -76,8 +76,7 @@ def mpld3_page(func):
         fig, plugins = func(*args, **kwargs)
         for plugin in plugins + [mpld3.plugins.Zoom()]:
             mpld3.plugins.connect(fig, plugin)
-        # Padding is required for the bottom to not get cut off
-        fig.tight_layout(pad=2)
+        fig.tight_layout()
         return mpld3.fig_to_html(fig)
 
     return wrapper
@@ -95,13 +94,18 @@ def split_into_years(l: list[T], get_date: Callable[[T], date],
 
     per_year: list[list[U]] = []
     years: list[str] = []
+    # Y2K v2
+    year_to_str: Callable[[int], str] = lambda y: str(y % 100).zfill(2)
     for i in range(1, len(breakpoints)):
         in_year: list[U] = []
+        start_year: Optional[int] = None
         for el in l:
             if breakpoints[i-1] < get_date(el) < breakpoints[i]:
                 in_year.append(map(el))
+                start_year = get_date(el).year
+                end_year = start_year + 1
         if in_year:
-            years.append(f"Y{i}")
+            years.append(f"20{year_to_str(start_year)}/{year_to_str(start_year + 1)}")
             per_year.append(in_year)
     return per_year, years
 
@@ -137,7 +141,7 @@ def assignment_marks_scatter():
 
     fig, axs = make_subplots(len(years), False)
     plugins: list[mpld3.plugins.PluginBase] = []
-    for ax, marks_in_year in zip(axs, marks_per_year):
+    for ax, marks_in_year, year in zip(axs, marks_per_year, years):
         # Sort by timestamp and generate labels
         x: tuple[datetime,]
         y: tuple[int,]
@@ -148,14 +152,16 @@ def assignment_marks_scatter():
 
         plot_regression_line(x, y, ax)
         l = ax.plot(x, y, marker='.', linestyle="None")[0]
-        plt.xlabel("Deadline")
-        plt.ylabel("Mark")
+        ax.set_title(f"Coursework mark vs time of year ({year})")
+        ax.set_xlabel("Deadline")
+        ax.set_ylabel("Mark")
         plugins.append(mpld3.plugins.PointHTMLTooltip(l, labels, css=LABEL_STYLE))
     return fig, plugins
 
 @mpld3_page
 def assignment_marks_delta_scatter():
     data: list[tuple[date, str, datetime, int]] = []
+    base = datetime.today().replace(day=1, month=6, hour=12, minute=0, second=0)
     for ass in ass_data["historicAssignments"]:
         submission_data = ass.get("submission")
         if "AEP submissions" in ass['name'] or not ass['hasFeedback'] or not submission_data:
@@ -166,7 +172,6 @@ def assignment_marks_delta_scatter():
             submission_data['submittedDate'])
         delta = deadline - submission_time
         # matplotlib only handles datetime not timedelta
-        base = datetime.today().replace(day=1, month=6, hour=12, minute=0, second=0)
         delta_as_datetime = base - delta
         mark = int(ass['feedback']['mark'])
         title = f"{ass['module']['code']}: {ass['name']}"
@@ -174,11 +179,11 @@ def assignment_marks_delta_scatter():
     marks_per_year, years = split_into_years(data, lambda t: t[0], lambda t: t[1:])
     min_mark, max_mark = general_2d_min_max(marks_per_year, lambda t: t[2])
 
-    fig, axs = make_subplots(len(years), True)
+    fig, axs = make_subplots(len(years), False)
 
     plugins: list[mpld3.plugins.PluginBase] = []
     mark_spread = range(min_mark, max_mark+1)
-    for ax, marks_in_year in zip(axs, marks_per_year):
+    for ax, marks_in_year, year in zip(axs, marks_per_year, years):
         # Sort by timestamp and generate labels
         x: tuple[datetime,]
         y: tuple[int,]
@@ -189,9 +194,10 @@ def assignment_marks_delta_scatter():
         ax.plot([base]*len(mark_spread), mark_spread, marker="None", linestyle="--")
         plot_regression_line(x, y, ax)
         l = ax.plot(x, y, marker='.', linestyle="None")[0]
-        ax.xaxis.set_label("Proximity to deadline "+
+        ax.set_title(f"Coursework mark vs difference between submission time and deadline ({year})")
+        ax.set_xlabel("Submission time relative to deadline "+
             "(depicted as if midday 1st June was the deadline)")
-        ax.yaxis.set_label("Mark")
+        ax.set_ylabel("Mark")
         plugins.append(mpld3.plugins.PointHTMLTooltip(l, labels, css=LABEL_STYLE))
     return fig, plugins
 
@@ -265,10 +271,13 @@ def assignment_marks_hist():
     bins = generate_mark_bins(min_mark, max_mark)
     fig, axs = make_subplots(len(marks_per_year), True)
     plugins = []
-    for ax, marks_in_year, mark_to_ass_in_year in zip(
-        axs, marks_per_year, mark_to_ass):
+    for ax, marks_in_year, mark_to_ass_in_year, year in zip(
+        axs, marks_per_year, mark_to_ass, years):
         labels = generate_bin_labels(marks_in_year, mark_to_ass_in_year, bins)
         plugins += plot_histogram_with_labels(marks_in_year, bins, labels, ax)
+        ax.set_title(f"Coursework marks ({year})")
+        ax.set_xlabel("Mark")
+        ax.set_ylabel("Frequency")
         plot_hist_gaus_model(marks_in_year, bins, ax, color="orange")
     return fig, plugins
 
@@ -296,6 +305,9 @@ def module_marks_hist():
         mark_to_module_in_year = mark_to_module[year]
         labels = generate_bin_labels(marks_in_year, mark_to_module_in_year, bins)
         plugins += plot_histogram_with_labels(marks_in_year, bins, labels, ax)
+        ax.set_title(f"Module marks (20{year})")
+        ax.set_xlabel("Mark")
+        ax.set_ylabel("Frequency")
         plot_hist_gaus_model(marks_in_year, bins, ax, color="orange")
     return fig, plugins
 
