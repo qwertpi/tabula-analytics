@@ -2,14 +2,19 @@ from collections import defaultdict
 from datetime import date, datetime, timedelta
 import json
 from math import ceil, sqrt
-from typing import Callable, Iterable, Optional, TypeVar
+from typing import Callable, Iterable, Optional, TypeVar, TYPE_CHECKING, cast
 
 from bottle import default_app, route, redirect # type: ignore
 import matplotlib.pyplot as plt # type: ignore
-import mpld3 # type: ignore
+from mpld3 import fig_to_html # type: ignore
+from mpld3.plugins import LineHTMLTooltip, PluginBase, PointHTMLTooltip, Zoom # type: ignore
+from mpld3.plugins import connect as connect_plugin # type: ignore
 import numpy as np
 from scipy.stats import norm, zscore # type: ignore
 from sklearn.linear_model import LinearRegression # type: ignore
+
+if TYPE_CHECKING:
+    from _typeshed import SupportsRichComparison
 
 SCALE = 0.8
 FIG_SIZE = (16*SCALE, 9*SCALE)
@@ -30,17 +35,17 @@ BUTTON_STYLE = f'''.button {{
     font-family: sans-serif;
     margin: inherit}}'''
 
-def generate_button(links_to: str, message:str, position: str):
+def generate_button(links_to: str, message:str, position: str) -> str:
     return (f"<a href='{links_to}' class='button' style='float: {position};'>"+
         f"{message}</a><style>{BUTTON_STYLE}</style>")
 
-def generate_prev_next_buttons(i: int):
-    def generate_prev_button(i: int):
+def generate_prev_next_buttons(i: int) -> str:
+    def generate_prev_button(i: int) -> str:
         if i == 1:
             return ""
         return generate_button(f"p{i-1}", "‹ Back", "left")
 
-    def generate_next_button(i: int):
+    def generate_next_button(i: int) -> str:
         if i == len(PAGES):
             return ""
         return generate_button(f"p{i+1}", "Next ›", "right")
@@ -48,6 +53,8 @@ def generate_prev_next_buttons(i: int):
     return generate_prev_button(i) + generate_next_button(i)
 
 data_loaded = False
+ass_data = {}
+gen_data = {}
 
 def load_data():
     with open('data/assignments.json', encoding="utf8") as f:
@@ -61,7 +68,7 @@ def load_data():
     global data_loaded
     data_loaded = True
 
-def make_subplots(num, sharex):
+def make_subplots(num, sharex) -> tuple[plt.FigureBase, np.ndarray]:
     # 1 -> (1, 1), 2 -> (1, 2), 3 -> (2, 2), 4 -> (2, 2), 5 -> (2, 3), ...
     width = ceil(sqrt(num))
     height = ceil(num/width)
@@ -74,48 +81,56 @@ def landing():
     load_data()
     redirect("/p1", 303)
 
-def mpld3_page(func):
-    def wrapper(*args, **kwargs) -> str:
+def mpld3_page(func: Callable[..., tuple[plt.FigureBase, list[PluginBase]]]):
+    def wrapper(*args, **kwargs):
         if not data_loaded:
             load_data()
 
         fig, plugins = func(*args, **kwargs)
-        for plugin in plugins + [mpld3.plugins.Zoom()]:
-            mpld3.plugins.connect(fig, plugin)
+        for plugin in plugins + [Zoom()]:
+            connect_plugin(fig, plugin)
         fig.tight_layout()
-        return mpld3.fig_to_html(fig)
+        return cast(str, fig_to_html(fig))
 
     return wrapper
 
 T = TypeVar("T")
-U = TypeVar("U")
+if TYPE_CHECKING:
+    C = TypeVar("C", bound=SupportsRichComparison)
+else:
+    C = TypeVar("C")
+
 def split_into_years(l: list[T], get_date: Callable[[T], date],
-    map: Callable[[T], U]):
+    map: Callable[[T], C]):
+    courses = gen_data['studentCourseDetails']
     course_start_date = datetime.strptime(
-        gen_data['studentCourseDetails'][0]['beginDate'], "%Y-%m-%d").date()
-    course_length = int(gen_data['studentCourseDetails'][-1]['courseYearLength'])
+        courses[0]['beginDate'], "%Y-%m-%d").date()
+    course_length = int(courses[-1]['courseYearLength'])
     # This is imprecise but it's ok as no marks fall near the boundaries
     breakpoints: list[date] = [course_start_date + timedelta(days=i*365)
         for i in range(0, course_length+1)]
 
-    per_year: list[list[U]] = []
+    per_year: list[list[C]] = []
     years: list[str] = []
     # Y2K v2
     year_to_str: Callable[[int], str] = lambda y: str(y % 100).zfill(2)
     for i in range(1, len(breakpoints)):
-        in_year: list[U] = []
+        in_year: list[C] = []
         start_year: Optional[int] = None
         for el in l:
             if breakpoints[i-1] < get_date(el) < breakpoints[i]:
                 in_year.append(map(el))
                 start_year = get_date(el).year
-                end_year = start_year + 1
-        if in_year:
-            years.append(f"20{year_to_str(start_year)}/{year_to_str(start_year + 1)}")
+
+        # Or equivalently if in_year:
+        if start_year:
+            years.append(f"20{year_to_str(start_year)}/" +
+                year_to_str(start_year + 1))
             per_year.append(in_year)
     return per_year, years
 
-def general_2d_min_max(l: Iterable[Iterable[T]], map: Callable[[T], U]) -> tuple[U, U]:
+def general_2d_min_max(l: Iterable[Iterable[T]],
+map: Callable[[T], C]) -> tuple[C, C]:
     relevant = [map(e) for inner_l in l for e in inner_l]
     return min(relevant), max(relevant)
 
@@ -126,11 +141,14 @@ def plot_regression_line(xs: Iterable[datetime], ys: Iterable[int], ax):
     reg_model = LinearRegression().fit(np.array(reg_x).reshape(-1, 1), ys)
     ys_reg = reg_model.predict(np.array(reg_x).reshape(-1, 1))
     err_z = zscore(np.array(ys) - ys_reg)
-    if any([abs(z) >= 2 for z in err_z]):
+    if any((abs(z) >= 2 for z in err_z)):
         reduced_xs, reduced_ys = zip(*[(x, y) for x, y, z in zip(xs, ys, err_z)
             if abs(z) < 2])
         return plot_regression_line(reduced_xs, reduced_ys, ax)
     ax.plot(xs, ys_reg, '-', color=BLUE)
+    return None
+
+id: Callable[[C], C] = lambda x: x
 
 @mpld3_page
 def assignment_marks_scatter():
@@ -143,10 +161,10 @@ def assignment_marks_scatter():
         mark = int(ass['feedback']['mark'])
         title = f"{ass['module']['code']}: {ass['name']}"
         data.append((title, timestamp, mark))
-    marks_per_year, years = split_into_years(data, lambda t: t[1].date(), lambda t: t)
+    marks_per_year, years = split_into_years(data, lambda t: t[1].date(), id)
 
     fig, axs = make_subplots(len(years), False)
-    plugins: list[mpld3.plugins.PluginBase] = []
+    plugins: list[PluginBase] = []
     for ax, marks_in_year, year in zip(axs, marks_per_year, years):
         # Sort by timestamp and generate labels
         x: tuple[datetime,]
@@ -161,7 +179,7 @@ def assignment_marks_scatter():
         ax.set_title(f"Coursework mark vs time of year ({year})")
         ax.set_xlabel("Deadline")
         ax.set_ylabel("Mark")
-        plugins.append(mpld3.plugins.PointHTMLTooltip(l, labels, css=LABEL_STYLE))
+        plugins.append(PointHTMLTooltip(l, labels, css=LABEL_STYLE))
     return fig, plugins
 
 @mpld3_page
@@ -170,7 +188,8 @@ def assignment_marks_delta_scatter():
     base = datetime.today().replace(day=1, month=6, hour=12, minute=0, second=0)
     for ass in ass_data["historicAssignments"]:
         submission_data = ass.get("submission")
-        if "AEP submissions" in ass['name'] or not ass['hasFeedback'] or not submission_data:
+        if ("AEP submissions" in ass['name'] or not ass['hasFeedback']
+        or not submission_data):
             continue
 
         deadline = datetime.fromisoformat(ass['studentDeadline'])
@@ -182,12 +201,13 @@ def assignment_marks_delta_scatter():
         mark = int(ass['feedback']['mark'])
         title = f"{ass['module']['code']}: {ass['name']}"
         data.append((deadline.date(), title, delta_as_datetime, mark))
-    marks_per_year, years = split_into_years(data, lambda t: t[0], lambda t: t[1:])
+    marks_per_year, years = split_into_years(data, lambda t: t[0],
+        lambda t: t[1:])
     min_mark, max_mark = general_2d_min_max(marks_per_year, lambda t: t[2])
 
     fig, axs = make_subplots(len(years), False)
 
-    plugins: list[mpld3.plugins.PluginBase] = []
+    plugins: list[PluginBase] = []
     mark_spread = range(min_mark, max_mark+1)
     for ax, marks_in_year, year in zip(axs, marks_per_year, years):
         # Sort by timestamp and generate labels
@@ -195,19 +215,21 @@ def assignment_marks_delta_scatter():
         y: tuple[int,]
         labels: tuple[str,]
         x, y, labels = zip(*sorted([
-            (t[1], t[2], f"<div class='label'>{t[0] + "<br>" + t[1].strftime("%X")}</div>")
-            for t in marks_in_year]))
+            (t[1], t[2], "<div class='label'" + t[0] + "<br>" +
+                t[1].strftime("%X") + "</div>") for t in marks_in_year]))
 
         # Zero marker
-        ax.plot([base]*len(mark_spread), mark_spread, marker="None", linestyle="--", color=RED)
+        ax.plot([base]*len(mark_spread), mark_spread, marker="None",
+            linestyle="--", color=RED)
 
         plot_regression_line(x, y, ax)
         l = ax.plot(x, y, marker='o', color=TEAL, linestyle="None")[0]
-        ax.set_title(f"Coursework mark vs difference between submission time and deadline ({year})")
+        ax.set_title("Coursework mark vs difference between submission time " +
+            f"and deadline ({year})")
         ax.set_xlabel("Submission time relative to deadline "+
             "(depicted as if midday 1st June was the deadline)")
         ax.set_ylabel("Mark")
-        plugins.append(mpld3.plugins.PointHTMLTooltip(l, labels, css=LABEL_STYLE))
+        plugins.append(PointHTMLTooltip(l, labels, css=LABEL_STYLE))
     return fig, plugins
 
 def generate_mark_bins(min_mark, max_mark):
@@ -223,7 +245,8 @@ def generate_mark_bins(min_mark, max_mark):
         bins.append(point)
     return bins
 
-def generate_bin_labels(data: list[int], data_to_labels: dict[int, list[str]], bins: list[int]):
+def generate_bin_labels(data_to_labels: dict[int, list[str]],
+bins: list[int]):
     bin_labels: list[str] = []
     lower = bins[0]
     upper: Optional[int] = None
@@ -232,21 +255,22 @@ def generate_bin_labels(data: list[int], data_to_labels: dict[int, list[str]], b
             [label for point in range(lower, upper)
                 for label in data_to_labels[point]]))
         lower = upper
-    bin_labels[-1] += "<br>" + "<br>".join([label for label in data_to_labels[lower]])
+    bin_labels[-1] += "<br>" + "<br>".join(list(data_to_labels[lower]))
     return bin_labels
 
-def plot_histogram_with_labels(data: list[int], bins: list[int], bin_labels: list[str], ax):
-    plugins = []
+def plot_histogram_with_labels(data: list[int], bins: list[int],
+bin_labels: list[str], ax):
+    plugins: list[PluginBase] = []
     bars = ax.hist(data, bins=bins, color=BLUE, edgecolor = "black")[2]
     for bar, label in zip(bars.get_children(), bin_labels):
-        tooltip = mpld3.plugins.LineHTMLTooltip(bar,
+        tooltip = LineHTMLTooltip(bar,
             label=f"<div class='label'>{label}</div>", css=LABEL_STYLE)
         plugins.append(tooltip)
     return plugins
 
 def plot_hist_gaus_model(data: list[int], bins: list[int], ax, **kwargs):
     zs = zscore(data)
-    if any([abs(z) >= 2 for z in zs]):
+    if any((abs(z) >= 2 for z in zs)):
         new_data = [d for d, z in zip(data, zs) if abs(z) < 2]
         return plot_hist_gaus_model(new_data, bins, ax, **kwargs)
 
@@ -255,6 +279,7 @@ def plot_hist_gaus_model(data: list[int], bins: list[int], ax, **kwargs):
     y = norm.pdf(x, loc=mean, scale=std)
     scale = ax.get_ylim()[1]/y.max()
     ax.plot(x, scale * y, color=RED, **kwargs)
+    return None
 
 @mpld3_page
 def assignment_marks_hist():
@@ -268,7 +293,8 @@ def assignment_marks_hist():
         mark = int(ass['feedback']['mark'])
         data.append((mark, f"{ass['module']['code']}: {ass['name']}", ass_date))
 
-    per_year_data, years = split_into_years(data, lambda t: t[2], lambda t: t[0:2])
+    per_year_data, years = split_into_years(data, lambda t: t[2],
+        lambda t: t[0:2])
     mark_to_ass: list[dict[int, list[str]]] = [defaultdict(list) for _ in years]
     for i, year in enumerate(per_year_data):
         for mark, ass_name in year:
@@ -276,13 +302,13 @@ def assignment_marks_hist():
     marks_per_year = [[key for key, l in d.items() for _ in l]
         for d in mark_to_ass]
 
-    min_mark, max_mark = general_2d_min_max(marks_per_year, lambda x: x)
+    min_mark, max_mark = general_2d_min_max(marks_per_year, id)
     bins = generate_mark_bins(min_mark, max_mark)
     fig, axs = make_subplots(len(marks_per_year), True)
-    plugins = []
+    plugins: list[PluginBase] = []
     for ax, marks_in_year, mark_to_ass_in_year, year in zip(
         axs, marks_per_year, mark_to_ass, years):
-        labels = generate_bin_labels(marks_in_year, mark_to_ass_in_year, bins)
+        labels = generate_bin_labels(mark_to_ass_in_year, bins)
         plugins += plot_histogram_with_labels(marks_in_year, bins, labels, ax)
         ax.set_title(f"Coursework marks ({year})")
         ax.set_xlabel("Mark")
@@ -292,27 +318,29 @@ def assignment_marks_hist():
 
 @mpld3_page
 def module_marks_hist():
-    mark_to_module: dict[str, dict[int, list[str]]] = defaultdict(lambda: defaultdict(list))
+    mark_to_module: dict[str, dict[int, list[str]]] = defaultdict(
+        lambda: defaultdict(list))
     for module in gen_data['studentCourseDetails'][-1]['moduleRegistrations']:
         if not module.get('mark'):
             continue
 
         module_name = (module['module']['code'].upper() + ": " +
             module['module']['name'])
-        mark_to_module[module['academicYear']][module['mark']].append(module_name)
+        mark_to_module[module['academicYear']][module['mark']].append(
+            module_name)
 
     plot_data: dict[str, list[int]] = {k: [m for m, l in d.items() for _ in l]
         for k, d in mark_to_module.items()}
     years = list(sorted(plot_data.keys(), key=lambda x: int(x.split("/")[0])))
-    min_mark, max_mark = general_2d_min_max(plot_data.values(), lambda t: int(t))
+    min_mark, max_mark = general_2d_min_max(plot_data.values(), int)
     bins = generate_mark_bins(min_mark, max_mark)
 
     fig, axs = make_subplots(len(years), True)
-    plugins = []
+    plugins: list[PluginBase] = []
     for ax, year in zip(axs, years):
         marks_in_year = plot_data[year]
         mark_to_module_in_year = mark_to_module[year]
-        labels = generate_bin_labels(marks_in_year, mark_to_module_in_year, bins)
+        labels = generate_bin_labels(mark_to_module_in_year, bins)
         plugins += plot_histogram_with_labels(marks_in_year, bins, labels, ax)
         ax.set_title(f"Module marks (20{year})")
         ax.set_xlabel("Mark")
@@ -320,12 +348,16 @@ def module_marks_hist():
         plot_hist_gaus_model(marks_in_year, bins, ax)
     return fig, plugins
 
-PAGES = [assignment_marks_scatter, assignment_marks_delta_scatter,
-    assignment_marks_hist, module_marks_hist]
+PAGES = cast(list[Callable[[], str]],
+    [assignment_marks_scatter, assignment_marks_delta_scatter,
+        assignment_marks_hist, module_marks_hist])
+
 @route('/p<page_number:int>')
 def general_page(page_number: int) -> str:
     if 1 <= page_number <= len(PAGES):
-        return PAGES[page_number - 1]() + generate_prev_next_buttons(page_number)
+        mpld3_html = PAGES[page_number - 1]()
+        buttons = generate_prev_next_buttons(page_number)
+        return mpld3_html + buttons
     return "Nice try"
 
 app = default_app()
