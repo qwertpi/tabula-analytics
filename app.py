@@ -14,15 +14,21 @@ from sklearn.linear_model import LinearRegression # type: ignore
 SCALE = 0.8
 FIG_SIZE = (16*SCALE, 9*SCALE)
 
-BUTTON_STYLE = '''.button {
+PURPLE = "#3C1053"
+BLUE   = "#00A9CE"
+TEAL   = "#6DCDB8"
+RED    = "#CB333B"
+
+# {{}} escapes the {}
+BUTTON_STYLE = f'''.button {{
     display: inline-block;
-    background-color: #3C1053;
+    background-color: {PURPLE};
     color: white;
     padding: 8px 16px;
     border-radius: 12px;
     text-decoration: none;
     font-family: sans-serif;
-    margin: inherit}'''
+    margin: inherit}}'''
 
 def generate_button(links_to: str, message:str, position: str):
     return (f"<a href='{links_to}' class='button' style='float: {position};'>"+
@@ -124,7 +130,7 @@ def plot_regression_line(xs: Iterable[datetime], ys: Iterable[int], ax):
         reduced_xs, reduced_ys = zip(*[(x, y) for x, y, z in zip(xs, ys, err_z)
             if abs(z) < 2])
         return plot_regression_line(reduced_xs, reduced_ys, ax)
-    ax.plot(xs, ys_reg, '-')
+    ax.plot(xs, ys_reg, '-', color=BLUE)
 
 @mpld3_page
 def assignment_marks_scatter():
@@ -151,7 +157,7 @@ def assignment_marks_scatter():
             for t in marks_in_year]))
 
         plot_regression_line(x, y, ax)
-        l = ax.plot(x, y, marker='.', linestyle="None")[0]
+        l = ax.plot(x, y, marker='o', color=TEAL, linestyle="None")[0]
         ax.set_title(f"Coursework mark vs time of year ({year})")
         ax.set_xlabel("Deadline")
         ax.set_ylabel("Mark")
@@ -191,9 +197,12 @@ def assignment_marks_delta_scatter():
         x, y, labels = zip(*sorted([
             (t[1], t[2], f"<div class='label'>{t[0] + "<br>" + t[1].strftime("%X")}</div>")
             for t in marks_in_year]))
-        ax.plot([base]*len(mark_spread), mark_spread, marker="None", linestyle="--")
+
+        # Zero marker
+        ax.plot([base]*len(mark_spread), mark_spread, marker="None", linestyle="--", color=RED)
+
         plot_regression_line(x, y, ax)
-        l = ax.plot(x, y, marker='.', linestyle="None")[0]
+        l = ax.plot(x, y, marker='o', color=TEAL, linestyle="None")[0]
         ax.set_title(f"Coursework mark vs difference between submission time and deadline ({year})")
         ax.set_xlabel("Submission time relative to deadline "+
             "(depicted as if midday 1st June was the deadline)")
@@ -228,7 +237,7 @@ def generate_bin_labels(data: list[int], data_to_labels: dict[int, list[str]], b
 
 def plot_histogram_with_labels(data: list[int], bins: list[int], bin_labels: list[str], ax):
     plugins = []
-    bars = ax.hist(data, bins=bins, edgecolor = "black")[2]
+    bars = ax.hist(data, bins=bins, color=BLUE, edgecolor = "black")[2]
     for bar, label in zip(bars.get_children(), bin_labels):
         tooltip = mpld3.plugins.LineHTMLTooltip(bar,
             label=f"<div class='label'>{label}</div>", css=LABEL_STYLE)
@@ -245,7 +254,7 @@ def plot_hist_gaus_model(data: list[int], bins: list[int], ax, **kwargs):
     x = range(bins[0], bins[-1]+1)
     y = norm.pdf(x, loc=mean, scale=std)
     scale = ax.get_ylim()[1]/y.max()
-    ax.plot(x, scale * y, **kwargs)
+    ax.plot(x, scale * y, color=RED, **kwargs)
 
 @mpld3_page
 def assignment_marks_hist():
@@ -278,7 +287,7 @@ def assignment_marks_hist():
         ax.set_title(f"Coursework marks ({year})")
         ax.set_xlabel("Mark")
         ax.set_ylabel("Frequency")
-        plot_hist_gaus_model(marks_in_year, bins, ax, color="orange")
+        plot_hist_gaus_model(marks_in_year, bins, ax)
     return fig, plugins
 
 @mpld3_page
@@ -308,7 +317,7 @@ def module_marks_hist():
         ax.set_title(f"Module marks (20{year})")
         ax.set_xlabel("Mark")
         ax.set_ylabel("Frequency")
-        plot_hist_gaus_model(marks_in_year, bins, ax, color="orange")
+        plot_hist_gaus_model(marks_in_year, bins, ax)
     return fig, plugins
 
 PAGES = [assignment_marks_scatter, assignment_marks_delta_scatter,
