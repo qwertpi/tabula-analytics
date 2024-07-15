@@ -8,7 +8,7 @@ from bottle import default_app, route, redirect # type: ignore
 import matplotlib.pyplot as plt # type: ignore
 import mpld3 # type: ignore
 import numpy as np
-from scipy.stats import norm # type: ignore
+from scipy.stats import norm, zscore # type: ignore
 from sklearn.linear_model import LinearRegression # type: ignore
 
 SCALE = 0.8
@@ -114,7 +114,12 @@ LABEL_STYLE = ".label{background-color: ghostwhite; border-style: groove;}"
 def plot_regression_line(xs: Iterable[datetime], ys: Iterable[int], ax):
     reg_x = [x.timestamp() for x in xs]
     reg_model = LinearRegression().fit(np.array(reg_x).reshape(-1, 1), ys)
-    ys_reg = [reg_model.predict(np.array(x).reshape(-1, 1)) for x in reg_x]
+    ys_reg = reg_model.predict(np.array(reg_x).reshape(-1, 1))
+    err_z = zscore(np.array(ys) - ys_reg)
+    if any([abs(z) >= 2 for z in err_z]):
+        reduced_xs, reduced_ys = zip(*[(x, y) for x, y, z in zip(xs, ys, err_z)
+            if abs(z) < 2])
+        return plot_regression_line(reduced_xs, reduced_ys, ax)
     ax.plot(xs, ys_reg, '-')
 
 @mpld3_page
@@ -225,6 +230,11 @@ def plot_histogram_with_labels(data: list[int], bins: list[int], bin_labels: lis
     return plugins
 
 def plot_hist_gaus_model(data: list[int], bins: list[int], ax, **kwargs):
+    zs = zscore(data)
+    if any([abs(z) >= 2 for z in zs]):
+        new_data = [d for d, z in zip(data, zs) if abs(z) < 2]
+        return plot_hist_gaus_model(new_data, bins, ax, **kwargs)
+
     mean, std = norm.fit(data)
     x = range(bins[0], bins[-1]+1)
     y = norm.pdf(x, loc=mean, scale=std)
