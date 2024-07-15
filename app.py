@@ -229,7 +229,7 @@ def plot_hist_gaus_model(data: list[int], bins: list[int], ax, **kwargs):
     x = range(bins[0], bins[-1]+1)
     y = norm.pdf(x, loc=mean, scale=std)
     scale = ax.get_ylim()[1]/y.max()
-    ax.plot(x, scale * y)
+    ax.plot(x, scale * y, **kwargs)
 
 @mpld3_page
 def assignment_marks_hist():
@@ -259,7 +259,7 @@ def assignment_marks_hist():
         axs, marks_per_year, mark_to_ass):
         labels = generate_bin_labels(marks_in_year, mark_to_ass_in_year, bins)
         plugins += plot_histogram_with_labels(marks_in_year, bins, labels, ax)
-        plot_hist_gaus_model(marks_in_year, bins, ax, color="orange", alpha=0.5)
+        plot_hist_gaus_model(marks_in_year, bins, ax, color="orange")
     return fig, plugins
 
 @mpld3_page
@@ -286,7 +286,7 @@ def module_marks_hist():
         mark_to_module_in_year = mark_to_module[year]
         labels = generate_bin_labels(marks_in_year, mark_to_module_in_year, bins)
         plugins += plot_histogram_with_labels(marks_in_year, bins, labels, ax)
-        plot_hist_gaus_model(marks_in_year, bins, ax, color="orange", alpha=0.5)
+        plot_hist_gaus_model(marks_in_year, bins, ax, color="orange")
     return fig, plugins
 
 PAGES = [assignment_marks_scatter, assignment_marks_delta_scatter,
