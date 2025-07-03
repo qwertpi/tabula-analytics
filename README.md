@@ -5,11 +5,8 @@ The University of Warwick's custom administration system [Tabula](https://warwic
 This project is neither affiliated with nor endorsed by the Tabula developers or The University of Warwick more generally.  
 This project is heavily inspired by [Warwick Wrapped](https://github.com/efbicief/warwick-wrapped).
 
-## Screenshots
-![Page 1](screenshots/page1.png?raw=True)
-![Page 2](screenshots/page2.png?raw=True)
-![Page 3](screenshots/page3.png?raw=True)
-![Page 4](screenshots/page4.png?raw=True)
+## Demonstration
+![Demonstration](screenshots/demo.gif?raw=True)
 
 ## Copyright
 Copyright © 2024  Rory Sharp All rights reserved.
