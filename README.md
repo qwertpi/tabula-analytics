@@ -30,6 +30,6 @@ For a (non-legally binding) summary of the license see https://tldrlegal.com/lic
 3. `mkdir data`
 
 ## Usage
-* To (re)load your data from Tabula: Log-in in your browser and copy your cookie into config.yaml, then run `python3 fetch_data.py`
+* To (re)load your data from Tabula: Log-in to Tabula in your browser and copy your `__Host-SSO-Tabula-SSC` cookie value into config.yaml, then run `python3 fetch_data.py`
 * To run the application: Run `python3 -m gunicorn app:app` and navigate to http://localhost:8000 in your web browser
 * To delete your local copy of your data (after all it may well contain information you deem sensitive): `bash purge_data.sh`
