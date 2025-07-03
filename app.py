@@ -16,7 +16,7 @@ from sklearn.linear_model import LinearRegression # type: ignore
 if TYPE_CHECKING:
     from _typeshed import SupportsRichComparison
 
-SCALE = 0.8
+SCALE = 0.85
 FIG_SIZE = (16*SCALE, 9*SCALE)
 
 PURPLE = "#3C1053"
@@ -69,14 +69,15 @@ def load_data():
     global data_loaded
     data_loaded = True
 
-def make_subplots(num, sharex) -> tuple[plt.FigureBase, np.ndarray]:
+def make_subplots(num, sharex) -> tuple[plt.FigureBase, list[plt.Axes]]:
+    fig = plt.figure(figsize=FIG_SIZE)
     # 1 -> (1, 1), 2 -> (1, 2), 3 -> (2, 2), 4 -> (2, 2), 5 -> (2, 3), ...
-    print(num)
     width = ceil(sqrt(num))
     height = ceil(num/width)
-    fig, axs = plt.subplots(height, width, sharex=sharex, sharey=True,
-        squeeze=False, figsize=FIG_SIZE)
-    return fig, axs.flatten()
+    ax1 = plt.subplot2grid((height, width), (0, 0))
+    axs = [ax1] + [plt.subplot2grid((height, width), (i//width, i % width), sharex=ax1 if sharex else None, sharey=ax1)
+        for i in range(1, num)]
+    return fig, axs
 
 @route('/')
 def landing():
@@ -91,7 +92,6 @@ def mpld3_page(func: Callable[..., tuple[plt.FigureBase, list[PluginBase]]]):
         fig, plugins = func(*args, **kwargs)
         for plugin in plugins + [Zoom()]:
             connect_plugin(fig, plugin)
-        fig.tight_layout()
         return cast(str, fig_to_html(fig))
 
     return wrapper
