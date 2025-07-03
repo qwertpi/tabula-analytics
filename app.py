@@ -53,13 +53,14 @@ def generate_prev_next_buttons(i: int) -> str:
     return generate_prev_button(i) + generate_next_button(i)
 
 data_loaded = False
-ass_data = {}
+ass_data = []
 gen_data = {}
 
 def load_data():
     with open('data/assignments.json', encoding="utf8") as f:
+        ass_filter = lambda ass: "AEP submissions" not in ass['name'] and ass['hasFeedback'] and ass['feedback']['mark'] is not None
         global ass_data
-        ass_data = json.load(f)
+        ass_data = list(filter(ass_filter, json.load(f)["historicAssignments"]))
 
     with open('data/me.json', encoding="utf8") as f:
         global gen_data
@@ -70,6 +71,7 @@ def load_data():
 
 def make_subplots(num, sharex) -> tuple[plt.FigureBase, np.ndarray]:
     # 1 -> (1, 1), 2 -> (1, 2), 3 -> (2, 2), 4 -> (2, 2), 5 -> (2, 3), ...
+    print(num)
     width = ceil(sqrt(num))
     height = ceil(num/width)
     fig, axs = plt.subplots(height, width, sharex=sharex, sharey=True,
@@ -153,10 +155,7 @@ id: Callable[[C], C] = lambda x: x
 @mpld3_page
 def assignment_marks_scatter():
     data: list[tuple[str, datetime, int]] = []
-    for ass in ass_data["historicAssignments"]:
-        if "AEP submissions" in ass['name'] or not ass['hasFeedback']:
-            continue
-
+    for ass in ass_data:
         timestamp = datetime.fromisoformat(ass['studentDeadline'])
         mark = int(ass['feedback']['mark'])
         title = f"{ass['module']['code']}: {ass['name']}"
@@ -186,12 +185,10 @@ def assignment_marks_scatter():
 def assignment_marks_delta_scatter():
     data: list[tuple[date, str, datetime, int]] = []
     base = datetime.today().replace(day=1, month=6, hour=12, minute=0, second=0)
-    for ass in ass_data["historicAssignments"]:
+    for ass in ass_data:
         submission_data = ass.get("submission")
-        if ("AEP submissions" in ass['name'] or not ass['hasFeedback']
-        or not submission_data):
+        if not submission_data:
             continue
-
         deadline = datetime.fromisoformat(ass['studentDeadline'])
         submission_time = datetime.fromisoformat(
             submission_data['submittedDate'])
@@ -285,10 +282,7 @@ def plot_hist_gaus_model(data: list[int], bins: list[int], ax, **kwargs):
 def assignment_marks_hist():
     data: list[tuple[int, str, date]] = []
 
-    for ass in ass_data["historicAssignments"]:
-        if "AEP submissions" in ass['name'] or not ass['hasFeedback']:
-            continue
-
+    for ass in ass_data:
         ass_date = datetime.fromisoformat(ass['studentDeadline']).date()
         mark = int(ass['feedback']['mark'])
         data.append((mark, f"{ass['module']['code']}: {ass['name']}", ass_date))
